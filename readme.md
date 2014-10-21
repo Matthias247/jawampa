@@ -429,6 +429,11 @@ Therefore the following restrictions apply:
   required in the WAMP specification. **jawampa** will use Jackson to transform
   data from binary to JSON which will use a base64 encoding, but will not
   prepend the data with a leading 0 byte.
-- **jawampa** only supports the **WAMPv2** basic profile. Features defined in the
-  advanced profile are not supported.
-- **jawampa** only supports websocket connections between WAMP clients and routers.
+- **jawampa** only supports the **WAMPv2** basic profile. Features defined in
+  the advanced profile are not supported.
+- **jawampa** only supports websocket connections between WAMP clients and
+  routers.
+- The roles of the client and router are properly transmitted but not taken into
+  account for all other actions. E.g. it won't be verified whether a remote peer
+  actually provides the needed functionality or not. The assumption is that all
+  peers implement all of the roles that apply for them.
