@@ -6,7 +6,7 @@ jawampa
 - provides WAMPv2 client side functionality as well as server side
   functionality and supports all currently defined WAMPv2 roles
   (caller, callee, publisher, subscriber, broker, dealer).
-- uses the [**Netty**](www.netty.io) framework as a transport layer for fast
+- uses the [**Netty**](http://www.netty.io) framework as a transport layer for fast
   and reliable communication.
 - exposes the client-side user-interface through
   [**RxJava**](https://github.com/ReactiveX/RxJava) Observables, which enable
