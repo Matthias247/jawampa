@@ -19,6 +19,27 @@ jawampa
 - is compatible with Java6. However the examples in this document use Java8
   syntax for convenience.
 
+Install
+-------
+Add the following repository to your pom.xml:
+
+    <repository>
+      <id>jawampa.mvn-repo</id>
+      <url>https://raw.github.com/Matthias247/jawampa/mvn-repo/</url>
+      <snapshots>
+        <enabled>true</enabled>
+        <updatePolicy>always</updatePolicy>
+      </snapshots>
+    </repository>
+
+and declare the following dependency:
+
+    <dependency>
+        <groupId>ws.wamp.jawampa</groupId>
+        <artifactId>jawampa</artifactId>
+        <version>0.1.0</version>
+    </dependency>
+
 
 WAMP client API (`WampClient`)
 ------------------------------
