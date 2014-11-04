@@ -95,19 +95,25 @@ public class SimpleWampWebsocketListener {
                 SelfSignedCertificate ssc = new SelfSignedCertificate();
                 sslCtx = SslContext.newServerContext(ssc.certificate(), ssc.privateKey());
             }
+            
+            // Use well-known ports if not explicitly specified
+            final int port;
+            if (uri.getPort() == -1) {
+                if (sslCtx != null) port = 443;
+                else port = 80;
+            } else port = uri.getPort();
         
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, clientGroup)
              .channel(NioServerSocketChannel.class)
              .childHandler(new WebSocketServerInitializer(uri, sslCtx));
             
-            channel = b.bind(uri.getHost(), uri.getPort()).sync().channel();
+            channel = b.bind(uri.getHost(), port).sync().channel();
         } 
         catch(Exception e) {
-            // TODO: Do sth with loops
+            throw new RuntimeException(e);
         }
         finally {
-
         }
     }
     
@@ -151,8 +157,8 @@ public class SimpleWampWebsocketListener {
     }
     
     /**
-    * Handles handshakes and messages
-    */
+     * Handles handshakes and messages
+     */
     public static class WebSocketServerHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         
         private final URI uri;

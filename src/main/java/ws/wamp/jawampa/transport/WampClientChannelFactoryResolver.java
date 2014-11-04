@@ -56,6 +56,11 @@ public class WampClientChannelFactoryResolver {
         
         if (scheme.equalsIgnoreCase("ws") || scheme.equalsIgnoreCase("wss")) {
             
+            // Check the host and port field for validity
+            if (uri.getHost() == null || uri.getPort() == 0) {
+                throw new ApplicationError(ApplicationError.INVALID_URI);
+            }
+            
             // Return a factory that creates a channel for websocket connections            
             return new WampClientChannelFactory() {
                 @Override
@@ -81,6 +86,13 @@ public class WampClientChannelFactoryResolver {
                         sslCtx0 = null;
                     }
                     
+                    // Use well-known ports if not explicitly specified
+                    final int port;
+                    if (uri.getPort() == -1) {
+                        if (needSsl) port = 443;
+                        else port = 80;
+                    } else port = uri.getPort();
+                    
                     final WebSocketClientHandshaker handshaker = WebSocketClientHandshakerFactory.newHandshaker(
                             uri, WebSocketVersion.V13, WampHandlerConfiguration.WAMP_WEBSOCKET_PROTOCOLS,
                             false, new DefaultHttpHeaders());
@@ -95,7 +107,7 @@ public class WampClientChannelFactoryResolver {
                         if (sslCtx0 != null) {
                             p.addLast(sslCtx0.newHandler(ch.alloc(), 
                                                          uri.getHost(),
-                                                         uri.getPort()));
+                                                         port));
                         }
                         p.addLast(
                             new HttpClientCodec(),
@@ -107,7 +119,7 @@ public class WampClientChannelFactoryResolver {
                         }
                     });
                     
-                    return b.connect(uri.getHost(), uri.getPort());
+                    return b.connect(uri.getHost(), port);
                 }
             };
         }
