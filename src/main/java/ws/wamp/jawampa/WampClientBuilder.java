@@ -18,6 +18,7 @@ package ws.wamp.jawampa;
 
 import io.netty.handler.ssl.SslContext;
 
+import java.net.SocketAddress;
 import java.net.URI;
 import java.util.HashSet;
 import java.util.Set;
@@ -42,6 +43,10 @@ public class WampClientBuilder {
     int reconnectInterval = DEFAULT_RECONNECT_INTERVAL;
     boolean closeOnErrors = true;
     Set<WampRoles> roles = new HashSet<WampRoles>();
+    
+    SocketAddress proxyAddress;
+    String proxyUser;
+    String proxyPassword;
     
     /** The default reconnect interval in milliseconds.<br>This is set to 5s */
     public static final int DEFAULT_RECONNECT_INTERVAL = 5000;
@@ -100,7 +105,8 @@ public class WampClientBuilder {
         }
         
         WampClientChannelFactory channelFactory = 
-            WampClientChannelFactoryResolver.getFactory(routerUri, sslContext);
+            WampClientChannelFactoryResolver.getFactory(routerUri, sslContext,
+                proxyAddress, proxyUser, proxyPassword);
         
         return new WampClient(routerUri, realm, rolesArray, closeOnErrors, 
                 channelFactory, nrReconnects, reconnectInterval);
@@ -211,6 +217,20 @@ public class WampClientBuilder {
      */
     public WampClientBuilder withSslContext(SslContext sslContext) {
         this.sslContext = sslContext;
+        return this;
+    }
+    
+    /**
+     * Sets a HTTP proxy that should be used for establishing the connection
+     * @param proxyAddress The address of the proxy
+     * @param username The username for the proxy
+     * @param password The password for the proxy
+     * @return The {@link WampClientBuilder} object
+     */
+    public WampClientBuilder withProxy(SocketAddress proxyAddress, String username, String password) {
+        this.proxyAddress = proxyAddress;
+        this.proxyUser = username;
+        this.proxyPassword = password;
         return this;
     }
 

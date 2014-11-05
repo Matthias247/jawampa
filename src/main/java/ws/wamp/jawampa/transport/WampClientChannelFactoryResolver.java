@@ -16,6 +16,7 @@
 
 package ws.wamp.jawampa.transport;
 
+import java.net.SocketAddress;
 import java.net.URI;
 
 import javax.net.ssl.SSLException;
@@ -40,6 +41,7 @@ import io.netty.handler.codec.http.websocketx.WebSocketClientHandshakerFactory;
 import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler;
 import io.netty.handler.codec.http.websocketx.WebSocketFrameAggregator;
 import io.netty.handler.codec.http.websocketx.WebSocketVersion;
+import io.netty.handler.proxy.HttpProxyHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 
@@ -49,7 +51,8 @@ import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
  */
 public class WampClientChannelFactoryResolver {
     
-    public static WampClientChannelFactory getFactory(final URI uri, final SslContext sslCtx) throws ApplicationError
+    public static WampClientChannelFactory getFactory(final URI uri, final SslContext sslCtx,
+        final SocketAddress proxyAddress, final String proxyUser, final String proxyPw) throws ApplicationError
     {
         String scheme = uri.getScheme();
         scheme = scheme != null ? scheme : "";
@@ -104,6 +107,9 @@ public class WampClientChannelFactoryResolver {
                         @Override
                         protected void initChannel(SocketChannel ch) {
                         ChannelPipeline p = ch.pipeline();
+                        if (proxyAddress != null) {
+                            p.addLast(new HttpProxyHandler(proxyAddress, proxyUser, proxyPw));
+                        }
                         if (sslCtx0 != null) {
                             p.addLast(sslCtx0.newHandler(ch.alloc(), 
                                                          uri.getHost(),
