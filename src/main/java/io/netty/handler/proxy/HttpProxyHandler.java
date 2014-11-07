@@ -94,7 +94,7 @@ public final class HttpProxyHandler extends ProxyHandler {
     protected void addCodec(ChannelHandlerContext ctx) throws Exception {
         ChannelPipeline p = ctx.pipeline();
         String name = ctx.name();
-        p.addBefore(name, null, codec);
+        p.addBefore(name, "proxyCodec", codec);
     }
 
     @Override
