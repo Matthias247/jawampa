@@ -216,6 +216,8 @@ public class WampRouter {
      * as far as possible.
      */
     public void close() {
+        if (eventLoop.isShuttingDown() || eventLoop.isShutdown()) return;
+        
         eventLoop.execute(new Runnable() {
             @Override
             public void run() {
