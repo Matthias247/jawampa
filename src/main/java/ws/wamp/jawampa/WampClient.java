@@ -36,7 +36,6 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-
 import rx.Observable;
 import rx.Observable.OnSubscribe;
 import rx.Observer;
@@ -126,8 +125,7 @@ public class WampClient {
     }
     
     final boolean closeClientOnErrors;
-    boolean isDisposed = false;
-    Exception closeError;
+    boolean isCompleted = false;
 
     /** The factory which is used to create new transports to the remote peer */
     final WampClientChannelFactory channelFactory;
@@ -233,18 +231,14 @@ public class WampClient {
         this.reconnectInterval = reconnectInterval;
     }
 
-    private void performDispose(Exception e) {
-        if (isDisposed) return;
-        
-        closeError = e;
-        isDisposed = true;
+    private void completeStatus(Exception e) {
+        if (isCompleted) return;
+        isCompleted = true;
 
         if (e != null)
             statusObservable.onError(e);
         else
             statusObservable.onCompleted();
-        
-        eventLoop.shutdownGracefully();
     }
 
     /**
@@ -260,7 +254,7 @@ public class WampClient {
         eventLoop.execute(new Runnable() {
             @Override
             public void run() {
-                if (isDisposed) return;
+                if (isCompleted) return;
                 // Reset the number of reconnects
                 // This happens in both connecting and disconnected case
                 remainingNrReconnects = totalNrReconnects;
@@ -415,7 +409,7 @@ public class WampClient {
             // Therefore we don't trigger retries
             closeCurrentTransport();
             statusObservable.onNext(status);
-            performDispose(e);
+            completeStatus(e);
         }
     }
 
@@ -453,31 +447,40 @@ public class WampClient {
     /**
      * Closes the session.<br>
      * It will not be possible to open the session again with {@link #open} for safety
-     * reasons. If a new session is required a new {@link WampClient} shoule be built
+     * reasons. If a new session is required a new {@link WampClient} should be built
      * through the used {@link WampClientBuilder}.
      */
     public void close() {
+        
+        // Avoid crashes on multiple/concurrent shutdowns
+        if (eventLoop.isShuttingDown() || eventLoop.isShutdown()) return;
+        
         eventLoop.execute(new Runnable() {
             @Override
             public void run() {
-                if (isDisposed) return; // Already closed
-                
-                if (status == Status.Connected) {
-                    // Send goodbye to the remote
-                    GoodbyeMessage msg = new GoodbyeMessage(null, 
-                        ApplicationError.SYSTEM_SHUTDOWN);
-                    channel.writeAndFlush(msg);
+                if (!isCompleted) // Check if already closed
+                {
+                    if (status == Status.Connected) {
+                        // Send goodbye to the remote
+                        GoodbyeMessage msg = new GoodbyeMessage(null, 
+                            ApplicationError.SYSTEM_SHUTDOWN);
+                        channel.writeAndFlush(msg);
+                    }
+                    
+                    if (status != Status.Disconnected) {
+                        // Close the connection (or connection attempt)
+                        remainingNrReconnects = 0; // Don't reconnect
+                        closeCurrentTransport();
+                        statusObservable.onNext(status);
+                    }
+                    
+                    // Normal close without an error
+                    completeStatus(null);
                 }
                 
-                if (status != Status.Disconnected) {
-                    // Close the connection (or connection attempt)
-                    remainingNrReconnects = 0; // Don't reconnect
-                    closeCurrentTransport();
-                    statusObservable.onNext(status);
-                }
-                
-                // Normal close without an error
-                performDispose(null);
+                // Shut down the eventLoop if it didn't happen before
+                if (eventLoop.isShuttingDown() || eventLoop.isShutdown()) return;
+                eventLoop.shutdownGracefully();
             }
         });
     }
@@ -500,7 +503,7 @@ public class WampClient {
         
         if (closeClientOnErrors) {
             remainingNrReconnects = 0;
-            performDispose(error);
+            completeStatus(error);
         }
         else {
             if (mayReconnect()) {
@@ -1099,7 +1102,7 @@ public class WampClient {
                                     newEntry.subscriptionId = t1;
                                     subscriptionsBySubscriptionId.put(t1, newEntry);
                                     // Add the cancellation functionality to all subscribers
-                                    // If one is already usubscribed this will immediatly call
+                                    // If one is already unsubscribed this will immediately call
                                     // the cancellation function for this subscriber
                                     for (Subscriber<? super PubSubData> s : newEntry.subscribers) {
                                         attachPubSubCancelationAction(s, newEntry, topic);
