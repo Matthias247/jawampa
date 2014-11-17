@@ -448,7 +448,7 @@ public class WampRouter {
             }
             
             Procedure proc = null;
-            if (err != null) {
+            if (err == null) {
                 proc = handler.realm.procedures.get(reg.procedure);
                 if (proc != null) err = ApplicationError.PROCEDURE_ALREADY_EXISTS;
             }
