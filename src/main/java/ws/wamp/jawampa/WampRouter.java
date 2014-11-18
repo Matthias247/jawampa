@@ -389,6 +389,9 @@ public class WampRouter {
             
             // Store the invocation
             proc.provider.pendingInvocations.put(invoc.invocationRequestId, invoc);
+            // Store the call in the procedure to return error if client unregisters
+            proc.pendingCalls.add(invoc);
+
             // And send it to the provider
             InvocationMessage imsg = new InvocationMessage(invoc.invocationRequestId,
                 proc.registrationId, null, call.arguments, call.argumentsKw);
@@ -399,6 +402,7 @@ public class WampRouter {
             YieldMessage yield = (YieldMessage) msg;
             if (!(IdValidator.isValidId(yield.requestId))) return;
             // Look up the invocation to find the original caller
+            if (handler.pendingInvocations == null) return;  // If a client send a yield without an invocation, return
             Invocation invoc = handler.pendingInvocations.get(yield.requestId);
             if (invoc == null) return; // There is no invocation pending under this ID
             handler.pendingInvocations.remove(yield.requestId);
@@ -421,6 +425,7 @@ public class WampRouter {
                 }
                 
                 // Look up the invocation to find the original caller
+                if (handler.pendingInvocations == null) return; // if an error is send before an invocation, do not do anything
                 Invocation invoc = handler.pendingInvocations.get(err.requestId);
                 if (invoc == null) return; // There is no invocation pending under this ID
                 handler.pendingInvocations.remove(err.requestId);
@@ -487,8 +492,10 @@ public class WampRouter {
             }
             
             Procedure proc = null;
-            if (err != null) {
-                proc = handler.providedProcedures.get(unreg.registrationId);
+            if (err == null) {
+                if (handler.providedProcedures != null) {
+                    proc = handler.providedProcedures.get(unreg.registrationId);
+                }
                 // Check whether the procedure exists AND if the caller is the owner
                 // If the caller is not the owner it might be an attack, so we don't
                 // disclose that the procedure exists.
