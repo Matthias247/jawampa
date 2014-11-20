@@ -68,7 +68,7 @@ public class Benchmark {
         WampClientBuilder builder = new WampClientBuilder();
 
         try {
-            builder.witUri("ws://localhost:8080/bench")
+            builder.withUri("ws://localhost:8080/bench")
                    .withRealm("realm2")
                    .withInfiniteReconnects()
                    .withReconnectInterval(1, TimeUnit.SECONDS);

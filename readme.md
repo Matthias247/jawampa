@@ -64,7 +64,7 @@ final WampClient client;
 try {
     // Create a builder and configure the client
     WampClientBuilder builder = new WampClientBuilder();
-    builder.witUri("ws://localhost:8080/wamprouter")
+    builder.withUri("ws://localhost:8080/wamprouter")
            .withRealm("examplerealm")
            .withInfiniteReconnects()
            .withReconnectInterval(5, TimeUnit.SECONDS);
