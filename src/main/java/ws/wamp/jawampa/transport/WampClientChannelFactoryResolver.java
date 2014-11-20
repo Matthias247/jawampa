@@ -108,7 +108,11 @@ public class WampClientChannelFactoryResolver {
                         protected void initChannel(SocketChannel ch) {
                         ChannelPipeline p = ch.pipeline();
                         if (proxyAddress != null) {
-                            p.addLast(new HttpProxyHandler(proxyAddress, proxyUser, proxyPw));
+                            if (proxyUser != null && proxyPw != null) {
+                                p.addLast(new HttpProxyHandler(proxyAddress, proxyUser, proxyPw));
+                            } else {
+                                p.addLast(new HttpProxyHandler(proxyAddress));
+                            }
                         }
                         if (sslCtx0 != null) {
                             p.addLast(sslCtx0.newHandler(ch.alloc(), 

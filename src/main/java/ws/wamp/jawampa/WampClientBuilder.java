@@ -234,6 +234,15 @@ public class WampClientBuilder {
     /**
      * Sets a HTTP proxy that should be used for establishing the connection
      * @param proxyAddress The address of the proxy
+     * @return The {@link WampClientBuilder} object
+     */
+    public WampClientBuilder withProxy(SocketAddress proxyAddress) {
+        return withProxy(proxyAddress, null, null);
+    }
+    
+    /**
+     * Sets a HTTP proxy that should be used for establishing the connection
+     * @param proxyAddress The address of the proxy
      * @param username The username for the proxy
      * @param password The password for the proxy
      * @return The {@link WampClientBuilder} object
