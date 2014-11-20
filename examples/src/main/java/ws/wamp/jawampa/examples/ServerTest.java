@@ -69,7 +69,7 @@ public class ServerTest {
         final WampClient client1;
         final WampClient client2;
         try {
-            builder.witUri("ws://localhost:8080/ws1")
+            builder.withUri("ws://localhost:8080/ws1")
                    .withRealm("realm1")
                    .withInfiniteReconnects()
                    .withReconnectInterval(3, TimeUnit.SECONDS);

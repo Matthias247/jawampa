@@ -110,8 +110,19 @@ public class WampClientBuilder {
      * Sets the address of the router to which the new client shall connect.
      * @param uri The address of the router, e.g. ws://wamp.ws/ws
      * @return The {@link WampClientBuilder} object
+     * @deprecated This method existed only due to a typo will be removed
      */
     public WampClientBuilder witUri(String uri) {
+        this.uri = uri;
+        return this;
+    }
+    
+    /**
+     * Sets the address of the router to which the new client shall connect.
+     * @param uri The address of the router, e.g. ws://wamp.ws/ws
+     * @return The {@link WampClientBuilder} object
+     */
+    public WampClientBuilder withUri(String uri) {
         this.uri = uri;
         return this;
     }
