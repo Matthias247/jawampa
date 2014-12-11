@@ -3,7 +3,7 @@
   
     <groupId>ws.wamp.jawampa</groupId>
     <artifactId>jawampa</artifactId>
-    <version>0.1.1</version>
+    <version>0.1.2</version>
   
     <name>jawampa</name>
     <url></url>
@@ -70,9 +70,9 @@
   
     <dependencies>
         <dependency>
-            <groupId>com.netflix.rxjava</groupId>
-            <artifactId>rxjava-core</artifactId>
-            <version>0.20.4</version>
+            <groupId>io.reactivex</groupId>
+            <artifactId>rxjava</artifactId>
+            <version>1.0.2</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>

@@ -36,11 +36,6 @@ public class SingleThreadedComputationScheduler extends rx.Scheduler {
 	final rx.Scheduler.Worker innerWorker = Schedulers.computation().createWorker();
     
     @Override
-    public int parallelism() {
-        return 1;
-    }
-    
-    @Override
     public Worker createWorker() {
         return new SchedulerWorker(innerWorker);
     }
