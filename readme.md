@@ -37,7 +37,7 @@ and declare the following dependency:
     <dependency>
         <groupId>ws.wamp.jawampa</groupId>
         <artifactId>jawampa</artifactId>
-        <version>0.1.2</version>
+        <version>0.1.3</version>
     </dependency>
 
 
