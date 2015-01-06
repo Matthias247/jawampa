@@ -626,6 +626,13 @@ public class WampRouter {
         } else if (msg instanceof PublishMessage) {
             // The client wants to publish something to all subscribers (apart from himself)
             PublishMessage pub = (PublishMessage) msg;
+            // Check whether the client wants an acknowledgement for the publication
+            // Default is no
+            boolean sendAcknowledge = false;
+            JsonNode ackOption = pub.options.get("acknowledge");
+            if (ackOption != null && ackOption.asBoolean() == true)
+                sendAcknowledge = true;
+            
             String err = null;
             if (!UriValidator.tryValidate(pub.topic)) {
                 // Client sent an invalid URI
@@ -640,7 +647,9 @@ public class WampRouter {
             if (err != null) { // If we have an error send that to the client
                 ErrorMessage errMsg = new ErrorMessage(PublishMessage.ID, pub.requestId, 
                     null, err, null, null);
-                handler.ctx.writeAndFlush(errMsg);
+                if (sendAcknowledge) {
+                    handler.ctx.writeAndFlush(errMsg);
+                }
                 return;
             }
             
@@ -649,7 +658,6 @@ public class WampRouter {
             // Get the subscriptions for this topic on the realm
             Set<Subscription> subscriptionSet = handler.realm.subscriptions.get(pub.topic);
             if (subscriptionSet != null) {
-                
                 for (Subscription subscriber : subscriptionSet) {
                     if (subscriber.subscriber == handler) continue; // Skip the publisher
                     // Publish the event to the subscriber
@@ -659,8 +667,10 @@ public class WampRouter {
                 }
             }
             
-            PublishedMessage response = new PublishedMessage(pub.requestId, publicationId);
-            handler.ctx.writeAndFlush(response);
+            if (sendAcknowledge) {
+                PublishedMessage response = new PublishedMessage(pub.requestId, publicationId);
+                handler.ctx.writeAndFlush(response);
+            }
         }
     }
     
