@@ -81,10 +81,18 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
     }
     
     private boolean isUpgradeRequest(FullHttpRequest request) {
-        return request.getDecoderResult().isSuccess() &&
-               request.headers().contains(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.UPGRADE, true) &&
-               request.headers().contains(HttpHeaders.Names.UPGRADE, HttpHeaders.Values.WEBSOCKET, true) &&
-               request.getUri().equals(websocketPath);
+        if(!request.getDecoderResult().isSuccess()){
+            return false;
+        }
+        String connectionHeaderValue = request.headers().get(HttpHeaders.Names.CONNECTION);
+        if(connectionHeaderValue == null || 
+           !connectionHeaderValue.toLowerCase().contains(HttpHeaders.Values.UPGRADE.toLowerCase())){
+            return false;
+        }
+        if(!request.headers().contains(HttpHeaders.Names.UPGRADE, HttpHeaders.Values.WEBSOCKET, true)){
+            return false;
+        }
+        return request.getUri().equals(websocketPath);
     }
     
     private void tryWebsocketHandshake(final ChannelHandlerContext ctx, FullHttpRequest request) {
