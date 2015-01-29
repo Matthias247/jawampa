@@ -18,8 +18,6 @@ package ws.wamp.jawampa.transport;
 
 import ws.wamp.jawampa.WampError;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -30,7 +28,6 @@ import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler;
 public class WampClientWebsocketHandler extends ChannelInboundHandlerAdapter {
     
     final WebSocketClientHandshaker handshaker;
-    final ObjectMapper objectMapper;
     
     Serialization serialization;
     
@@ -38,9 +35,8 @@ public class WampClientWebsocketHandler extends ChannelInboundHandlerAdapter {
         return serialization;
     }
     
-    public WampClientWebsocketHandler(WebSocketClientHandshaker handshaker, ObjectMapper objectMapper) {
+    public WampClientWebsocketHandler(WebSocketClientHandshaker handshaker) {
         this.handshaker = handshaker;
-        this.objectMapper = objectMapper;
     }
     
     @Override
@@ -69,23 +65,18 @@ public class WampClientWebsocketHandler extends ChannelInboundHandlerAdapter {
         if (evt == WebSocketClientProtocolHandler.ClientHandshakeStateEvent.HANDSHAKE_COMPLETE) {
             // Handshake is completed
             String actualProtocol = handshaker.actualSubprotocol();
-            if (actualProtocol.equals("wamp.2.json")) {
-                serialization = Serialization.Json;
-            }
-    //            else if (actualProtocol.equals("wamp.2.msgpack")) {
-    //                serialization = Serialization.MessagePack;
-    //            }
-            else { // We don't want that protocol
+            serialization = Serialization.fromString(actualProtocol);
+            if (serialization == Serialization.Invalid) {
                 throw new WampError("Invalid Websocket Protocol");
             }
             
             // Install the serializer and deserializer
             ctx.pipeline()
                .addAfter(ctx.name(), "wamp-deserializer", 
-                         new WampDeserializationHandler(serialization, objectMapper));
+                         new WampDeserializationHandler(serialization));
             ctx.pipeline()
                .addAfter(ctx.name(), "wamp-serializer", 
-                         new WampSerializationHandler(serialization, objectMapper));
+                         new WampSerializationHandler(serialization));
             
             // Fire the connection established event
             ctx.fireUserEventTriggered(WampChannelEvents.WEBSOCKET_CONN_ESTABLISHED);

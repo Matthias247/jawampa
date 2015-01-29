@@ -22,8 +22,6 @@ import javax.net.ssl.SSLException;
 
 import ws.wamp.jawampa.ApplicationError;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
@@ -65,8 +63,7 @@ public class WampClientChannelFactoryResolver {
             return new WampClientChannelFactory() {
                 @Override
                 public ChannelFuture createChannel(final ChannelHandler handler, 
-                                                   final EventLoopGroup eventLoop,
-                                                   final ObjectMapper objectMapper)
+                                                   final EventLoopGroup eventLoop)
                                                    throws Exception
                 {
                     // Initialize SSL when required
@@ -114,7 +111,7 @@ public class WampClientChannelFactoryResolver {
                             new HttpObjectAggregator(8192),
                             new WebSocketClientProtocolHandler(handshaker, false),
                             new WebSocketFrameAggregator(WampHandlerConfiguration.MAX_WEBSOCKET_FRAME_SIZE),
-                            new WampClientWebsocketHandler(handshaker, objectMapper),
+                            new WampClientWebsocketHandler(handshaker),
                             handler);
                         }
                     });

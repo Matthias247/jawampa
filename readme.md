@@ -444,8 +444,6 @@ Restrictions
 **jawampa** is very young and in a work-in-progress state.  
 Therefore the following restrictions apply:
 
-- **jawampa** only supports the **Json** serialization for WAMP messages.  
-  MessagePack is not yet supported.
 - **jawampa** does not properly support the transmission of binary values as
   required in the WAMP specification. **jawampa** will use Jackson to transform
   data from binary to JSON which will use a base64 encoding, but will not

@@ -16,14 +16,47 @@
 
 package ws.wamp.jawampa.transport;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.msgpack.jackson.dataformat.MessagePackFactory;
+
 /**
  * Possible serialization methods for WAMP
  */
 public enum Serialization {
     /** Used for cases where the serialization could not be negotiated */
-    Invalid,
+    Invalid("", true, null),
     /** Use the JSON serialization */
-    Json,
+    Json("wamp.2.json", true, new ObjectMapper()),
     /** Use the MessagePack serialization */
-    MessagePack
+    MessagePack("wamp.2.msgpack", false, new ObjectMapper(new MessagePackFactory()));
+
+    private String stringValue;
+    private boolean isText;
+    private ObjectMapper objectMapper;
+
+    Serialization(String stringValue, boolean isText, ObjectMapper objectMapper) {
+        this.stringValue = stringValue;
+        this.isText = isText;
+        this.objectMapper = objectMapper;
+    }
+
+    public boolean isText() {
+        return isText;
+    }
+
+    public ObjectMapper getObjectMapper() {
+        return objectMapper;
+    }
+
+    @Override
+    public String toString() {
+        return stringValue;
+    }
+
+    public static Serialization fromString(String serialization) {
+        if (serialization == null) return Invalid;
+        else if (serialization.equals("wamp.2.json")) return Json;
+        else if (serialization.equals("wamp.2.msgpack")) return MessagePack;
+        return Invalid;
+    }
 }

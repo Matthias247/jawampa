@@ -47,17 +47,15 @@ public class WampDeserializationHandler extends MessageToMessageDecoder<WebSocke
     }
     
     ReadState readState = ReadState.Closed;
-    
-    final ObjectMapper objectMapper;
+
     final Serialization serialization;
     
     public Serialization serialization() {
         return serialization;
     }
     
-    public WampDeserializationHandler(Serialization serialization, ObjectMapper objectMapper) {
+    public WampDeserializationHandler(Serialization serialization) {
         this.serialization = serialization;
-        this.objectMapper = objectMapper;
     }
     
     @Override
@@ -82,33 +80,50 @@ public class WampDeserializationHandler extends MessageToMessageDecoder<WebSocke
         throws Exception 
     {
         if (readState != ReadState.Reading) return;
+
+        ObjectMapper objectMapper = serialization.getObjectMapper();
         if (frame instanceof TextWebSocketFrame) {
-            // Only want Text when JSON subprotocol
-            if (serialization != Serialization.Json)
+            // Only want Text frames when text subprotocol
+            if (!serialization.isText())
                 throw new IllegalStateException("Received unexpected TextFrame");
             
             TextWebSocketFrame textFrame = (TextWebSocketFrame) frame;
-            if (logger.isDebugEnabled()) {
-                logger.debug("Deserialized Wamp Message: {}", textFrame.text());
-            }
-            //System.out.println("Deserialized Wamp message: " + textFrame.text());
             
             try {
                 // If we receive an invalid frame on of the following functions will throw
                 // This will lead Netty to closing the connection
                 ArrayNode arr = objectMapper.readValue(
                     new ByteBufInputStream(textFrame.content()), ArrayNode.class);
-            
+
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Deserialized Wamp Message: {}", arr.toString());
+                }
+
                 WampMessage recvdMessage = WampMessage.fromObjectArray(arr);
                 out.add(recvdMessage);
             } finally {
             }
         } else if (frame instanceof BinaryWebSocketFrame) {
-            // Only want Binary when MessagePack subprotocol
-            if (serialization != Serialization.MessagePack)
+            // Only want Binary frames when binary subprotocol
+            if (serialization.isText())
                 throw new IllegalStateException("Received unexpected BinaryFrame");
-        
-            // TODO: Support MessagePack
+
+            BinaryWebSocketFrame binaryFrame = (BinaryWebSocketFrame) frame;
+
+            try {
+                // If we receive an invalid frame on of the following functions will throw
+                // This will lead Netty to closing the connection
+                ArrayNode arr = objectMapper.readValue(
+                        new ByteBufInputStream(binaryFrame.content()), ArrayNode.class);
+
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Deserialized Wamp Message: {}", arr.toString());
+                }
+
+                WampMessage recvdMessage = WampMessage.fromObjectArray(arr);
+                out.add(recvdMessage);
+            } finally {
+            }
         } else if (frame instanceof PongWebSocketFrame) {
             // System.out.println("WebSocket Client received pong");
         } else if (frame instanceof CloseWebSocketFrame) {

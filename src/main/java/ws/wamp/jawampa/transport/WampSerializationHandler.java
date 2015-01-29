@@ -20,6 +20,7 @@ import java.util.List;
 
 import ws.wamp.jawampa.WampMessages.WampMessage;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.netty.buffer.ByteBuf;
@@ -27,6 +28,7 @@ import io.netty.buffer.ByteBufOutputStream;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageEncoder;
+import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
@@ -34,23 +36,15 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 public class WampSerializationHandler extends MessageToMessageEncoder<WampMessage> {
     
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(WampSerializationHandler.class);
-    
-    enum ReadState {
-        Closed,
-        Reading,
-        Error
-    }
-    
-    final ObjectMapper objectMapper;
+
     final Serialization serialization;
     
     public Serialization serialization() {
         return serialization;
     }
     
-    public WampSerializationHandler(Serialization serialization, ObjectMapper objectMapper) {
+    public WampSerializationHandler(Serialization serialization) {
         this.serialization = serialization;
-        this.objectMapper = objectMapper;
     }
     
     @Override
@@ -59,21 +53,27 @@ public class WampSerializationHandler extends MessageToMessageEncoder<WampMessag
 
     @Override
     protected void encode(ChannelHandlerContext ctx, WampMessage msg, List<Object> out) throws Exception {
-        if (serialization == Serialization.Json) {
-            ByteBuf msgBuffer = Unpooled.buffer();
-            ByteBufOutputStream outStream = new ByteBufOutputStream(msgBuffer);
-            try {
-                objectMapper.writeValue(outStream, msg.toObjectArray(objectMapper)); // TODO: Non JSON Mapping
-            } catch (Exception e) {
-                msgBuffer.release();
-                return;
-            }
-            
-            TextWebSocketFrame frame = new TextWebSocketFrame(msgBuffer);
+        ByteBuf msgBuffer = Unpooled.buffer();
+        ByteBufOutputStream outStream = new ByteBufOutputStream(msgBuffer);
+        ObjectMapper objectMapper = serialization.getObjectMapper();
+        try {
+            JsonNode node = msg.toObjectArray(objectMapper);
+            objectMapper.writeValue(outStream, node);
+
             if (logger.isDebugEnabled()) {
-                logger.debug("Serialized Wamp Message: {}", frame.text());
+                logger.debug("Serialized Wamp Message: {}", objectMapper.writeValueAsString(node));
             }
-            //System.out.println("Serialized Wamp message: " + frame.text());
+
+        } catch (Exception e) {
+            msgBuffer.release();
+            return;
+        }
+
+        if (serialization.isText()) {
+            TextWebSocketFrame frame = new TextWebSocketFrame(msgBuffer);
+            out.add(frame);
+        } else {
+            BinaryWebSocketFrame frame = new BinaryWebSocketFrame(msgBuffer);
             out.add(frame);
         }
     }

@@ -33,8 +33,8 @@ public class WampHandlerConfiguration {
     
     static {
         Set<String> p = new HashSet<String>();
-        p.add("wamp.2.json");
-        //p.add("wamp.2.msgpack"); // uncomment once MessagePack support is implemented
+        p.add(Serialization.Json.toString());
+        p.add(Serialization.MessagePack.toString());
         WAMP_WEBSOCKET_PROTOCOLS_SET = Collections.unmodifiableSet(p);
         
         StringBuilder b = new StringBuilder();
