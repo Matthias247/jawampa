@@ -37,6 +37,7 @@ import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.util.ReferenceCountUtil;
+import io.netty.util.internal.StringUtil;
 import static io.netty.handler.codec.http.HttpHeaders.Names.*;
 import static io.netty.handler.codec.http.HttpVersion.*;
 
@@ -81,17 +82,30 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
     }
     
     private boolean isUpgradeRequest(FullHttpRequest request) {
-        if(!request.getDecoderResult().isSuccess()){
+        if (!request.getDecoderResult().isSuccess()) {
             return false;
         }
+        
         String connectionHeaderValue = request.headers().get(HttpHeaders.Names.CONNECTION);
-        if(connectionHeaderValue == null || 
-           !connectionHeaderValue.toLowerCase().contains(HttpHeaders.Values.UPGRADE.toLowerCase())){
+        if (connectionHeaderValue == null) {
             return false;
         }
-        if(!request.headers().contains(HttpHeaders.Names.UPGRADE, HttpHeaders.Values.WEBSOCKET, true)){
+        String[] connectionHeaderFields = StringUtil.split(connectionHeaderValue.toLowerCase(), ',');
+        boolean hasUpgradeField = false;
+        for (String s : connectionHeaderFields) {
+            if (s.trim().equals(HttpHeaders.Values.UPGRADE.toLowerCase())) {
+                hasUpgradeField = true;
+                break;
+            }
+        }
+        if (!hasUpgradeField) {
             return false;
         }
+        
+        if (!request.headers().contains(HttpHeaders.Names.UPGRADE, HttpHeaders.Values.WEBSOCKET, true)){
+            return false;
+        }
+        
         return request.getUri().equals(websocketPath);
     }
     
