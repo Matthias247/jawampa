@@ -17,6 +17,7 @@
 package ws.wamp.jawampa.transport;
 
 import ws.wamp.jawampa.WampRouter;
+
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -124,12 +125,7 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
             handshakeInProgress = true;
             final ChannelFuture handshakeFuture = handshaker.handshake(ctx.channel(), request);
             String actualProtocol = handshaker.selectedSubprotocol();
-            if (actualProtocol != null && actualProtocol.equals("wamp.2.json")) {
-                serialization = Serialization.Json;
-            }
-//            else if (actualProtocol.equals("wamp.2.msgpack")) {
-//                serialization = Serialization.MessagePack;
-//            }
+            serialization = Serialization.fromString(actualProtocol);
             
             // In case of unsupported websocket subprotocols we close the connection.
             // Won't help us when the client will ignore our protocol response and send
@@ -161,9 +157,9 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
             
             // Install the serializer and deserializer
             protocolHandlerCtx.pipeline().addLast("wamp-serializer", 
-                new WampSerializationHandler(serialization, router.objectMapper()));
+                new WampSerializationHandler(serialization));
             protocolHandlerCtx.pipeline().addLast("wamp-deserializer", 
-                new WampDeserializationHandler(serialization, router.objectMapper()));
+                new WampDeserializationHandler(serialization));
             
             // Install the router in the pipeline
             protocolHandlerCtx.pipeline().addLast(router.eventLoop(), "wamp-router", router.createRouterHandler());

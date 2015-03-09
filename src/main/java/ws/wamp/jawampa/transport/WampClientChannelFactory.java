@@ -20,8 +20,6 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.EventLoopGroup;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 /**
  * A factory that can create channel objects that are used by
  * {@link ws.wamp.jawampa.WampClient WampClients} to connect to WAMP routers.
@@ -32,12 +30,10 @@ public interface WampClientChannelFactory {
      * Creates a new transport towards the given URI
      * @param handler The clients session handler that should be put on top of the new pipeline.
      * @param eventLoop The EventLoopGroup that the new channel should be assigned to.
-     * @param objectMapper The ObjectMapper that the transport should
-     * use for serialization.
      * @return A {@link ChannelFuture} that will complete when the transport
      * was created. If an error happens during channel creation the future will be completed
      * with an error. In this case the channel member won't be valid. 
      */
-    ChannelFuture createChannel(ChannelHandler handler, EventLoopGroup eventLoop, ObjectMapper objectMapper) 
+    ChannelFuture createChannel(ChannelHandler handler, EventLoopGroup eventLoop)
         throws Exception;
 }

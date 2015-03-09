@@ -375,7 +375,7 @@ public class WampClient {
     private void beginConnect() {
         handler = new SessionHandler();
         try {
-            connectFuture = channelFactory.createChannel(handler, eventLoop, objectMapper);
+            connectFuture = channelFactory.createChannel(handler, eventLoop);
             connectFuture.addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture f) throws Exception {
@@ -1327,7 +1327,7 @@ public class WampClient {
     
     /**
      * Returns a future that will be completed once the client terminates.<br>
-     * This can be used to wait for completion after {@link close close()} was called.
+     * This can be used to wait for completion after {@link #close() close} was called.
      */
     public Future<Void> getTerminationFuture() {
         final Promise<Void> p = new Promise<Void>();
