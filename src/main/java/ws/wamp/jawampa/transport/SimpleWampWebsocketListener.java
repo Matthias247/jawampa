@@ -151,7 +151,7 @@ public class SimpleWampWebsocketListener {
             }
             pipeline.addLast(new HttpServerCodec());
             pipeline.addLast(new HttpObjectAggregator(65536));
-            pipeline.addLast(new WampServerWebsocketHandler(uri.getPath(), router));
+            pipeline.addLast(new WampServerWebsocketHandler(uri.getPath().length()==0 ? "/" : uri.getPath(), router));
             pipeline.addLast(new WebSocketServerHandler(uri));
         }
     }
