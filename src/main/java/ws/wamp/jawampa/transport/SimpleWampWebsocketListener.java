@@ -17,8 +17,11 @@
 package ws.wamp.jawampa.transport;
 
 import java.net.URI;
+import java.util.List;
 
 import ws.wamp.jawampa.WampRouter;
+import ws.wamp.jawampa.WampSerialization;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -42,6 +45,7 @@ import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
 import io.netty.util.CharsetUtil;
+
 import static io.netty.handler.codec.http.HttpHeaders.Names.*;
 import static io.netty.handler.codec.http.HttpMethod.*;
 import static io.netty.handler.codec.http.HttpResponseStatus.*;
@@ -67,24 +71,31 @@ public class SimpleWampWebsocketListener {
     
     final URI uri;
     SslContext sslCtx;
+    List<WampSerialization> serializations;
     
     Channel channel;
     
     boolean started = false;
     
     public SimpleWampWebsocketListener(WampRouter router, URI uri, SslContext sslContext) {
+        this(router, uri, sslContext, null);
+    }
+
+    public SimpleWampWebsocketListener(WampRouter router, URI uri, SslContext sslContext,
+                                       List<WampSerialization> serializations) {
         this.router = router;
         this.uri = uri;
-        
+        this.serializations = serializations;
+
         this.bossGroup = new NioEventLoopGroup(1);
         this.clientGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors());
-        
+
         // Copy the ssl context only when we really want ssl
         if (uri.getScheme().equalsIgnoreCase("wss")) {
             this.sslCtx = sslContext;
         }
     }
-    
+
     public void start() {
         if (state != State.Intialized) return;
         
@@ -151,7 +162,8 @@ public class SimpleWampWebsocketListener {
             }
             pipeline.addLast(new HttpServerCodec());
             pipeline.addLast(new HttpObjectAggregator(65536));
-            pipeline.addLast(new WampServerWebsocketHandler(uri.getPath().length()==0 ? "/" : uri.getPath(), router));
+            pipeline.addLast(new WampServerWebsocketHandler(uri.getPath().length()==0 ? "/" : uri.getPath(), router,
+                    serializations));
             pipeline.addLast(new WebSocketServerHandler(uri));
         }
     }

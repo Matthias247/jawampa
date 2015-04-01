@@ -19,7 +19,9 @@ package ws.wamp.jawampa;
 import io.netty.handler.ssl.SslContext;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -43,6 +45,7 @@ public class WampClientBuilder {
     boolean useStrictUriValidation = false;
     boolean closeOnErrors = true;
     Set<WampRoles> roles = new HashSet<WampRoles>();
+    List<WampSerialization> serializations = new ArrayList<WampSerialization>();
     
     /** The default reconnect interval in milliseconds.<br>This is set to 5s */
     public static final int DEFAULT_RECONNECT_INTERVAL = 5000;
@@ -58,6 +61,7 @@ public class WampClientBuilder {
         roles.add(WampRoles.Callee);
         roles.add(WampRoles.Publisher);
         roles.add(WampRoles.Subscriber);
+        WampSerialization.getDefaultSerializations(serializations);
     }
     
     /**
@@ -99,9 +103,13 @@ public class WampClientBuilder {
             rolesArray[i] = r;
             i++;
         }
-        
+
+        if (serializations.size() == 0) {
+            throw new ApplicationError(ApplicationError.INVALID_SERIALIZATIONS);
+        }
+
         WampClientChannelFactory channelFactory = 
-            WampClientChannelFactoryResolver.getFactory(routerUri, sslContext);
+            WampClientChannelFactoryResolver.getFactory(routerUri, sslContext, serializations);
         
         return new WampClient(routerUri, realm, rolesArray,
                 useStrictUriValidation, closeOnErrors, 
@@ -155,7 +163,26 @@ public class WampClientBuilder {
         }
         return this;
     }
-    
+
+    /**
+     * Adjusts the serializations that this client supports in the session.<br>
+     * By default a client will have all serializations (JSON, MessagePack).<br>
+     * The order of the list indicates client preference to the router during
+     * negotiation.<br>
+     * Use this function to adjust the serializations if not all are needed or
+     * a different order is desired.
+     * @param serializations The set of serializations that the client supports.
+     * @return The {@link WampClientBuilder} object
+     */
+    public WampClientBuilder withSerializations(WampSerialization[] serializations) {
+        this.serializations.clear();
+        if (serializations == null) return this; // Will throw on build()
+        for (WampSerialization serialization : serializations) {
+            this.serializations.add(serialization);
+        }
+        return this;
+    }
+
     /**
      * Allows to activate or deactivate the validation of all WAMP Uris according to the
      * strict URI validation rules which are described in the WAMP specification.

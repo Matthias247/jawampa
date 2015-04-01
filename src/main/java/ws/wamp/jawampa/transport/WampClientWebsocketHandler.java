@@ -24,14 +24,15 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketClientHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler;
+import ws.wamp.jawampa.WampSerialization;
 
 public class WampClientWebsocketHandler extends ChannelInboundHandlerAdapter {
     
     final WebSocketClientHandshaker handshaker;
     
-    Serialization serialization;
+    WampSerialization serialization;
     
-    public Serialization serialization() {
+    public WampSerialization serialization() {
         return serialization;
     }
     
@@ -65,8 +66,8 @@ public class WampClientWebsocketHandler extends ChannelInboundHandlerAdapter {
         if (evt == WebSocketClientProtocolHandler.ClientHandshakeStateEvent.HANDSHAKE_COMPLETE) {
             // Handshake is completed
             String actualProtocol = handshaker.actualSubprotocol();
-            serialization = Serialization.fromString(actualProtocol);
-            if (serialization == Serialization.Invalid) {
+            serialization = WampSerialization.fromString(actualProtocol);
+            if (serialization == WampSerialization.Invalid) {
                 throw new WampError("Invalid Websocket Protocol");
             }
             

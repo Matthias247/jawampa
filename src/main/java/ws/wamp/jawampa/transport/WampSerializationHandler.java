@@ -32,18 +32,19 @@ import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
+import ws.wamp.jawampa.WampSerialization;
 
 public class WampSerializationHandler extends MessageToMessageEncoder<WampMessage> {
     
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(WampSerializationHandler.class);
 
-    final Serialization serialization;
+    final WampSerialization serialization;
     
-    public Serialization serialization() {
+    public WampSerialization serialization() {
         return serialization;
     }
     
-    public WampSerializationHandler(Serialization serialization) {
+    public WampSerializationHandler(WampSerialization serialization) {
         this.serialization = serialization;
     }
     

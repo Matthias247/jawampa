@@ -39,6 +39,11 @@ import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.internal.StringUtil;
+import ws.wamp.jawampa.WampSerialization;
+
+import java.util.ArrayList;
+import java.util.List;
+
 import static io.netty.handler.codec.http.HttpHeaders.Names.*;
 import static io.netty.handler.codec.http.HttpVersion.*;
 
@@ -49,13 +54,25 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
     
     final String websocketPath;
     final WampRouter router;
+    final List<WampSerialization> supportedSerializations;
     
-    Serialization serialization = Serialization.Invalid;
+    WampSerialization serialization = WampSerialization.Invalid;
     boolean handshakeInProgress = false;
-    
+
     public WampServerWebsocketHandler(String websocketPath, WampRouter router) {
+        this(websocketPath, router, null);
+    }
+
+    public WampServerWebsocketHandler(String websocketPath, WampRouter router,
+                                      List<WampSerialization> supportedSerializations) {
         this.websocketPath = websocketPath;
         this.router = router;
+        if (supportedSerializations == null || supportedSerializations.isEmpty()) {
+            this.supportedSerializations = new ArrayList<WampSerialization>();
+            WampSerialization.getDefaultSerializations(this.supportedSerializations);
+        } else {
+            this.supportedSerializations = supportedSerializations;
+        }
     }
     
     @Override
@@ -112,9 +129,10 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
     
     private void tryWebsocketHandshake(final ChannelHandlerContext ctx, FullHttpRequest request) {
         String wsLocation = getWebSocketLocation(ctx, request);
+        String subProtocols = WampHandlerConfiguration.getWebsocketProtocols(supportedSerializations);
         WebSocketServerHandshaker handshaker =
             new WebSocketServerHandshakerFactory(wsLocation,
-                                                 WampHandlerConfiguration.WAMP_WEBSOCKET_PROTOCOLS,
+                                                 subProtocols,
                                                  false,
                                                  WampHandlerConfiguration.MAX_WEBSOCKET_FRAME_SIZE)
                                                 .newHandshaker(request);
@@ -125,12 +143,12 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
             handshakeInProgress = true;
             final ChannelFuture handshakeFuture = handshaker.handshake(ctx.channel(), request);
             String actualProtocol = handshaker.selectedSubprotocol();
-            serialization = Serialization.fromString(actualProtocol);
+            serialization = WampSerialization.fromString(actualProtocol);
             
             // In case of unsupported websocket subprotocols we close the connection.
             // Won't help us when the client will ignore our protocol response and send
             // invalid packets anyway
-            if (serialization == Serialization.Invalid) {
+            if (serialization == WampSerialization.Invalid) {
                 handshakeFuture.addListener(ChannelFutureListener.CLOSE);
                 return;
             }

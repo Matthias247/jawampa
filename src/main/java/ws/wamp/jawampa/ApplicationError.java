@@ -194,6 +194,8 @@ public class ApplicationError extends WampError {
     public final static String PARAMETER_IS_NULL = "jawampa.error.parameter_is_null";
     
     public final static String INVALID_ROLES = "jawampa.error.invalid_roles";
+
+    public final static String INVALID_SERIALIZATIONS = "jawampa.error.invalid_serializations";
     
     public final static String INVALID_REALM = "jawampa.error.invalid_realm";
     

@@ -14,15 +14,17 @@
  * under the License.
  */
 
-package ws.wamp.jawampa.transport;
+package ws.wamp.jawampa;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.msgpack.jackson.dataformat.MessagePackFactory;
 
+import java.util.List;
+
 /**
  * Possible serialization methods for WAMP
  */
-public enum Serialization {
+public enum WampSerialization {
     /** Used for cases where the serialization could not be negotiated */
     Invalid("", true, null),
     /** Use the JSON serialization */
@@ -30,11 +32,11 @@ public enum Serialization {
     /** Use the MessagePack serialization */
     MessagePack("wamp.2.msgpack", false, new ObjectMapper(new MessagePackFactory()));
 
-    private String stringValue;
-    private boolean isText;
-    private ObjectMapper objectMapper;
+    private final String stringValue;
+    private final boolean isText;
+    private final ObjectMapper objectMapper;
 
-    Serialization(String stringValue, boolean isText, ObjectMapper objectMapper) {
+    WampSerialization(String stringValue, boolean isText, ObjectMapper objectMapper) {
         this.stringValue = stringValue;
         this.isText = isText;
         this.objectMapper = objectMapper;
@@ -53,10 +55,15 @@ public enum Serialization {
         return stringValue;
     }
 
-    public static Serialization fromString(String serialization) {
+    public static WampSerialization fromString(String serialization) {
         if (serialization == null) return Invalid;
         else if (serialization.equals("wamp.2.json")) return Json;
         else if (serialization.equals("wamp.2.msgpack")) return MessagePack;
         return Invalid;
+    }
+
+    public static void getDefaultSerializations(List<WampSerialization> serializations) {
+        serializations.add(Json);
+        serializations.add(MessagePack);
     }
 }

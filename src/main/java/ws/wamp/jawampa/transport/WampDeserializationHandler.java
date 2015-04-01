@@ -35,6 +35,7 @@ import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
+import ws.wamp.jawampa.WampSerialization;
 
 public class WampDeserializationHandler extends MessageToMessageDecoder<WebSocketFrame> {
     
@@ -48,13 +49,13 @@ public class WampDeserializationHandler extends MessageToMessageDecoder<WebSocke
     
     ReadState readState = ReadState.Closed;
 
-    final Serialization serialization;
+    final WampSerialization serialization;
     
-    public Serialization serialization() {
+    public WampSerialization serialization() {
         return serialization;
     }
     
-    public WampDeserializationHandler(Serialization serialization) {
+    public WampDeserializationHandler(WampSerialization serialization) {
         this.serialization = serialization;
     }
     

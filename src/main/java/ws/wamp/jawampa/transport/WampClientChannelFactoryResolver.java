@@ -17,10 +17,12 @@
 package ws.wamp.jawampa.transport;
 
 import java.net.URI;
+import java.util.List;
 
 import javax.net.ssl.SSLException;
 
 import ws.wamp.jawampa.ApplicationError;
+import ws.wamp.jawampa.WampSerialization;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
@@ -47,7 +49,8 @@ import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
  */
 public class WampClientChannelFactoryResolver {
     
-    public static WampClientChannelFactory getFactory(final URI uri, final SslContext sslCtx) throws ApplicationError
+    public static WampClientChannelFactory getFactory(final URI uri, final SslContext sslCtx,
+                                                      final List<WampSerialization> serializations) throws ApplicationError
     {
         String scheme = uri.getScheme();
         scheme = scheme != null ? scheme : "";
@@ -89,9 +92,11 @@ public class WampClientChannelFactoryResolver {
                         if (needSsl) port = 443;
                         else port = 80;
                     } else port = uri.getPort();
-                    
+
+                    String subProtocols = WampHandlerConfiguration.getWebsocketProtocols(serializations);
+
                     final WebSocketClientHandshaker handshaker = WebSocketClientHandshakerFactory.newHandshaker(
-                            uri, WebSocketVersion.V13, WampHandlerConfiguration.WAMP_WEBSOCKET_PROTOCOLS,
+                            uri, WebSocketVersion.V13, subProtocols,
                             false, new DefaultHttpHeaders());
                     
                     Bootstrap b = new Bootstrap();
