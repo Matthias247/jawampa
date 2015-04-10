@@ -659,7 +659,18 @@ public class WampRouter {
             Set<Subscription> subscriptionSet = handler.realm.subscriptions.get(pub.topic);
             if (subscriptionSet != null) {
                 for (Subscription subscriber : subscriptionSet) {
-                    if (subscriber.subscriber == handler) continue; // Skip the publisher
+                    if (subscriber.subscriber == handler) {
+                        boolean skipPublisher = true;
+                        if (pub.options != null) {
+                            JsonNode excludeMeNode = pub.options.get("exclude_me");
+                            if (excludeMeNode != null) {
+                                skipPublisher = excludeMeNode.asBoolean();
+                            }
+                        }
+                        if (skipPublisher) {
+                            continue;
+                        }
+                    }
                     // Publish the event to the subscriber
                     EventMessage ev = new EventMessage(subscriber.subscriptionId, publicationId,
                         null, pub.arguments, pub.argumentsKw);
@@ -734,7 +745,11 @@ public class WampRouter {
         ObjectNode welcomeDetails = objectMapper.createObjectNode();
         ObjectNode routerRoles = welcomeDetails.putObject("roles");
         for (WampRoles role : realm.config.roles) {
-            routerRoles.putObject(role.toString());
+            ObjectNode roleNode = routerRoles.putObject(role.toString());
+            if (role == WampRoles.Publisher ) {
+                ObjectNode featuresNode = roleNode.putObject("features");
+                featuresNode.put("publisher_exclusion", true);
+            }
         }
         
         // Respond with the WELCOME message

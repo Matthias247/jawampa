@@ -346,7 +346,11 @@ public class WampClient {
                 ObjectNode o = objectMapper.createObjectNode();
                 ObjectNode rolesNode = o.putObject("roles");
                 for (WampRoles role : clientRoles) {
-                    rolesNode.putObject(role.toString());
+                    ObjectNode roleNode = rolesNode.putObject(role.toString());
+                    if (role == WampRoles.Publisher ) {
+                        ObjectNode featuresNode = roleNode.putObject("features");
+                        featuresNode.put("publisher_exclusion", true);
+                    }
                 }
                 
                 ctx.writeAndFlush(new WampMessages.HelloMessage(realm, o));
@@ -764,7 +768,7 @@ public class WampClient {
     public Observable<Long> publish(final String topic, Object... args) {
         return publish(topic, buildArgumentsArray(args), null);
     }
-    
+
     /**
      * Publishes an event under the given topic.
      * @param topic The topic that should be used for publishing the event
@@ -780,7 +784,7 @@ public class WampClient {
         else
             return publish(topic, null, null);
     }
-    
+
     /**
      * Publishes an event under the given topic.
      * @param topic The topic that should be used for publishing the event
@@ -792,7 +796,12 @@ public class WampClient {
      * publication ID) and will then be completed or will be completed with
      * an error if the event could not be published.
      */
-    public Observable<Long> publish(final String topic, final ArrayNode arguments, 
+    public Observable<Long> publish(String topic, ArrayNode arguments, ObjectNode argumentsKw)
+    {
+        return publish(topic, null, arguments, argumentsKw);
+    }
+
+    public Observable<Long> publish(final String topic, final ObjectNode options, final ArrayNode arguments,
         final ObjectNode argumentsKw)
     {
         final AsyncSubject<Long> resultSubject = AsyncSubject.create();
@@ -816,7 +825,7 @@ public class WampClient {
                 final long requestId = IdGenerator.newLinearId(lastRequestId, requestMap);
                 lastRequestId = requestId;
                 final WampMessages.PublishMessage msg =
-                    new WampMessages.PublishMessage(requestId, null, topic, arguments, argumentsKw);
+                    new WampMessages.PublishMessage(requestId, options, topic, arguments, argumentsKw);
                 
                 requestMap.put(requestId, new RequestMapEntry(WampMessages.PublishMessage.ID, resultSubject));
                 channel.writeAndFlush(msg);
