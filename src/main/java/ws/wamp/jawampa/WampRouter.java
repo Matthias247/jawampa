@@ -67,7 +67,11 @@ public class WampRouter {
         final RealmConfig config;
         final List<WampRouterHandler> channels = new ArrayList<WampRouterHandler>();
         final Map<String, Procedure> procedures = new HashMap<String, Procedure>();
-        final Map<String, Set<Subscription>> subscriptions = new HashMap<String, Set<Subscription>>();
+        
+        // Fields that are used for implementing subscription functionality
+        final Map<String, Subscription> subscriptionsByTopic = new HashMap<String, Subscription>();
+        final Map<Long, Subscription> subscriptionsById = new HashMap<Long, Subscription>();
+        long lastUsedSubscriptionId = IdValidator.MIN_VALID_ID;
         
         public Realm(RealmConfig config) {
             this.config = config;
@@ -83,17 +87,18 @@ public class WampRouter {
         void removeChannel(WampRouterHandler channel, boolean removeFromList) {
             if (channel.realm == null) return;
             
-            if (channel.subscriptions != null) {
+            if (channel.subscriptionsById != null) {
                 // Remove the channels subscriptions from our subscription table
-                for (Subscription sub : channel.subscriptions.values()) {
-                    Set<Subscription> subscriptionSet = subscriptions.get(sub.topic);
-                    subscriptionSet.remove(sub);
-                    if (subscriptionSet.isEmpty()) {
-                        subscriptions.remove(sub.topic);
+                for (Subscription sub : channel.subscriptionsById.values()) {
+                    sub.subscribers.remove(channel);
+                    if (sub.subscribers.isEmpty()) {
+                        // Subscription is no longer used by any client
+                        subscriptionsByTopic.remove(sub.topic);
+                        subscriptionsById.remove(sub.subscriptionId);
                     }
                 }
-                channel.subscriptions.clear();
-                channel.subscriptions = null;
+                channel.subscriptionsById.clear();
+                channel.subscriptionsById = null;
             }
             
             if (channel.providedProcedures != null) {
@@ -149,12 +154,12 @@ public class WampRouter {
     static class Subscription {
         final String topic;
         final long subscriptionId;
-        final WampRouterHandler subscriber;
+        final Set<WampRouterHandler> subscribers;
         
-        public Subscription(String topic, long subscriptionId, WampRouterHandler subscriber) {
+        public Subscription(String topic, long subscriptionId) {
             this.topic = topic;
             this.subscriptionId = subscriptionId;
-            this.subscriber = subscriber;
+            this.subscribers = new HashSet<WampRouterHandler>();
         }
     }
     
@@ -268,7 +273,8 @@ public class WampRouter {
         
         Map<Long, Invocation> pendingInvocations;
         
-        Map<Long, Subscription> subscriptions;
+        /** The Set of subscriptions to which this channel is subscribed */
+        Map<Long, Subscription> subscriptionsById;
         
         long lastUsedId = IdValidator.MIN_VALID_ID;
         
@@ -556,27 +562,38 @@ public class WampRouter {
                 return;
             }
             
-            // Everything checked, we can add the caller as a subscriber
-            long subscriptionId = IdGenerator.newLinearId(handler.lastUsedId, handler.subscriptions);
-            handler.lastUsedId = subscriptionId;
-            
-            Subscription s = new Subscription(sub.topic, subscriptionId, handler);
-            
-            // Add the subscription on the realm
-            Set<Subscription> subscriptionSet = handler.realm.subscriptions.get(sub.topic);
-            if (subscriptionSet == null) {
-                // First subscriber - create a new set
-                subscriptionSet = new HashSet<Subscription>();
-                handler.realm.subscriptions.put(sub.topic, subscriptionSet);
+            // Create a new subscription map for the client if it was not subscribed before
+            if (handler.subscriptionsById == null) {
+                handler.subscriptionsById = new HashMap<Long, WampRouter.Subscription>();
             }
-            subscriptionSet.add(s);
-            // Add the subscription on the client
-            if (handler.subscriptions == null) {
-                handler.subscriptions = new HashMap<Long, WampRouter.Subscription>();
-            }
-            handler.subscriptions.put(subscriptionId, s);
             
-            SubscribedMessage response = new SubscribedMessage(sub.requestId, subscriptionId);
+            // Search if a subscription from any client on the realm to this topic exists
+            Subscription subscription = handler.realm.subscriptionsByTopic.get(sub.topic);
+            if (subscription == null) {
+                // No client was subscribed to this URI up to now
+                // Create a new subscription id
+                long subscriptionId = IdGenerator.newLinearId(handler.realm.lastUsedSubscriptionId,
+                                                              handler.realm.subscriptionsById);
+                handler.realm.lastUsedSubscriptionId = subscriptionId;
+                // Create and add the new subscription
+                subscription = new Subscription(sub.topic, subscriptionId);
+                handler.realm.subscriptionsByTopic.put(sub.topic, subscription);
+                handler.realm.subscriptionsById.put(subscriptionId, subscription);
+            }
+            
+            // We check if the client is already subscribed to this topic by trying to add the
+            // new client as a receiver. If the client is already a receiver we do nothing
+            // (already subscribed and already stored in handler.subscriptionsById). Calling
+            // add to check and add is more efficient than checking with contains first.
+            // If the client was already subscribed this will return the same subscriptionId
+            // than as for the last subscription.
+            // See discussion in https://groups.google.com/forum/#!topic/wampws/kC878Ngc9Z0
+            if (subscription.subscribers.add(handler)) {
+                // Add the subscription on the client
+                handler.subscriptionsById.put(subscription.subscriptionId, subscription);
+            }
+            
+            SubscribedMessage response = new SubscribedMessage(sub.requestId, subscription.subscriptionId);
             handler.ctx.writeAndFlush(response);
         } else if (msg instanceof UnsubscribeMessage) {
             // The client wants to cancel a subscription
@@ -592,8 +609,8 @@ public class WampRouter {
             Subscription s = null;
             if (err == null) {
                 // Check whether such a subscription exists and fetch the topic name
-                if (handler.subscriptions != null) {
-                    s = handler.subscriptions.get(unsub.subscriptionId);
+                if (handler.subscriptionsById != null) {
+                    s = handler.subscriptionsById.get(unsub.subscriptionId);
                 }
                 if (s == null) {
                     err = ApplicationError.NO_SUCH_SUBSCRIPTION;
@@ -607,17 +624,19 @@ public class WampRouter {
                 return;
             }
 
-            // Remove the subscription from the realm
-            Set<Subscription> subscriptionSet = handler.realm.subscriptions.get(s.topic);
-            subscriptionSet.remove(s);
-            if (subscriptionSet.isEmpty()) {
-                handler.realm.subscriptions.remove(s.topic);
-            }
+            // Remove the channel as an receiver from the subscription
+            s.subscribers.remove(handler);
             
             // Remove the subscription from the handler
-            handler.subscriptions.remove(unsub.subscriptionId);
-            if (handler.subscriptions.isEmpty()) {
-                handler.subscriptions = null;
+            handler.subscriptionsById.remove(s.subscriptionId);
+            if (handler.subscriptionsById.isEmpty()) {
+                handler.subscriptionsById = null;
+            }
+            
+            // Remove the subscription from the realm if no subscriber is left
+            if (s.subscribers.isEmpty()) {
+                handler.realm.subscriptionsByTopic.remove(s.topic);
+                handler.realm.subscriptionsById.remove(s.subscriptionId);
             }
             
             // Send the acknowledge
@@ -656,14 +675,14 @@ public class WampRouter {
             long publicationId = IdGenerator.newRandomId(null); // Store that somewhere?
 
             // Get the subscriptions for this topic on the realm
-            Set<Subscription> subscriptionSet = handler.realm.subscriptions.get(pub.topic);
-            if (subscriptionSet != null) {
-                for (Subscription subscriber : subscriptionSet) {
-                    if (subscriber.subscriber == handler) continue; // Skip the publisher
+            Subscription subscription = handler.realm.subscriptionsByTopic.get(pub.topic);
+            if (subscription != null) {
+                for (WampRouterHandler receiver : subscription.subscribers) {
+                    if (receiver == handler) continue; // Skip the publisher
                     // Publish the event to the subscriber
-                    EventMessage ev = new EventMessage(subscriber.subscriptionId, publicationId,
+                    EventMessage ev = new EventMessage(subscription.subscriptionId, publicationId,
                         null, pub.arguments, pub.argumentsKw);
-                    subscriber.subscriber.ctx.writeAndFlush(ev);
+                    receiver.ctx.writeAndFlush(ev);
                 }
             }
             
