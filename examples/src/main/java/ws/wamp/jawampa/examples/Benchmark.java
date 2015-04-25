@@ -62,12 +62,14 @@ public class Benchmark {
         }
         
         URI serverUri = URI.create("ws://0.0.0.0:8080/bench");
-        SimpleWampWebsocketListener server = new SimpleWampWebsocketListener(router, serverUri, null);
-        server.start();
-
-        WampClientBuilder builder = new WampClientBuilder();
+        SimpleWampWebsocketListener server;
 
         try {
+            server = new SimpleWampWebsocketListener(router, serverUri, null);
+            server.start();
+
+            WampClientBuilder builder = new WampClientBuilder();
+            
             builder.withUri("ws://localhost:8080/bench")
                    .withRealm("realm2")
                    .withInfiniteReconnects()

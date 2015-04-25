@@ -93,7 +93,7 @@ public class WampClientChannelFactoryResolver {
                         else port = 80;
                     } else port = uri.getPort();
 
-                    String subProtocols = WampHandlerConfiguration.getWebsocketProtocols(serializations);
+                    String subProtocols = WampSerialization.makeWebsocketSubprotocolList(serializations);
 
                     final WebSocketClientHandshaker handshaker = WebSocketClientHandshakerFactory.newHandshaker(
                             uri, WebSocketVersion.V13, subProtocols,

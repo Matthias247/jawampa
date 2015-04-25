@@ -19,9 +19,9 @@ package ws.wamp.jawampa.transport;
 import java.net.URI;
 import java.util.List;
 
+import ws.wamp.jawampa.ApplicationError;
 import ws.wamp.jawampa.WampRouter;
 import ws.wamp.jawampa.WampSerialization;
-
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -45,7 +45,6 @@ import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
 import io.netty.util.CharsetUtil;
-
 import static io.netty.handler.codec.http.HttpHeaders.Names.*;
 import static io.netty.handler.codec.http.HttpMethod.*;
 import static io.netty.handler.codec.http.HttpResponseStatus.*;
@@ -53,7 +52,7 @@ import static io.netty.handler.codec.http.HttpVersion.*;
 
 /**
  * A simple default implementation for the websocket adapter for a WAMP router.<br>
- * It provides listening capabilites for a WAMP router on a given websocket address.
+ * It provides listening capabilities for a WAMP router on a given websocket address.
  */
 public class SimpleWampWebsocketListener {
     
@@ -77,15 +76,18 @@ public class SimpleWampWebsocketListener {
     
     boolean started = false;
     
-    public SimpleWampWebsocketListener(WampRouter router, URI uri, SslContext sslContext) {
-        this(router, uri, sslContext, null);
+    public SimpleWampWebsocketListener(WampRouter router, URI uri, SslContext sslContext) throws ApplicationError {
+        this(router, uri, sslContext, WampSerialization.defaultSerializations());
     }
 
     public SimpleWampWebsocketListener(WampRouter router, URI uri, SslContext sslContext,
-                                       List<WampSerialization> serializations) {
+                                       List<WampSerialization> serializations) throws ApplicationError {
         this.router = router;
         this.uri = uri;
         this.serializations = serializations;
+        
+        if (serializations == null || serializations.size() == 0 || serializations.contains(WampSerialization.Invalid))
+            throw new ApplicationError(ApplicationError.INVALID_SERIALIZATIONS);
 
         this.bossGroup = new NioEventLoopGroup(1);
         this.clientGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors());

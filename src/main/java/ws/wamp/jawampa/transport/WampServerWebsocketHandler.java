@@ -17,7 +17,6 @@
 package ws.wamp.jawampa.transport;
 
 import ws.wamp.jawampa.WampRouter;
-
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -41,7 +40,6 @@ import io.netty.util.ReferenceCountUtil;
 import io.netty.util.internal.StringUtil;
 import ws.wamp.jawampa.WampSerialization;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static io.netty.handler.codec.http.HttpHeaders.Names.*;
@@ -60,19 +58,14 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
     boolean handshakeInProgress = false;
 
     public WampServerWebsocketHandler(String websocketPath, WampRouter router) {
-        this(websocketPath, router, null);
+        this(websocketPath, router, WampSerialization.defaultSerializations());
     }
 
     public WampServerWebsocketHandler(String websocketPath, WampRouter router,
                                       List<WampSerialization> supportedSerializations) {
         this.websocketPath = websocketPath;
         this.router = router;
-        if (supportedSerializations == null || supportedSerializations.isEmpty()) {
-            this.supportedSerializations = new ArrayList<WampSerialization>();
-            WampSerialization.getDefaultSerializations(this.supportedSerializations);
-        } else {
-            this.supportedSerializations = supportedSerializations;
-        }
+        this.supportedSerializations = supportedSerializations;
     }
     
     @Override
@@ -129,7 +122,7 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
     
     private void tryWebsocketHandshake(final ChannelHandlerContext ctx, FullHttpRequest request) {
         String wsLocation = getWebSocketLocation(ctx, request);
-        String subProtocols = WampHandlerConfiguration.getWebsocketProtocols(supportedSerializations);
+        String subProtocols = WampSerialization.makeWebsocketSubprotocolList(supportedSerializations);
         WebSocketServerHandshaker handshaker =
             new WebSocketServerHandshakerFactory(wsLocation,
                                                  subProtocols,

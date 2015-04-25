@@ -17,8 +17,11 @@
 package ws.wamp.jawampa;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.msgpack.jackson.dataformat.MessagePackFactory;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -61,9 +64,32 @@ public enum WampSerialization {
         else if (serialization.equals("wamp.2.msgpack")) return MessagePack;
         return Invalid;
     }
+    
+    public static String makeWebsocketSubprotocolList(List<WampSerialization> serializations) {
+        StringBuilder subProtocolBuilder = new StringBuilder();
+        boolean first = true;
+        for (WampSerialization serialization : serializations) {
+            if (!first) subProtocolBuilder.append(',');
+            first = false;
+            subProtocolBuilder.append(serialization.toString());
+        }
 
-    public static void getDefaultSerializations(List<WampSerialization> serializations) {
+        return subProtocolBuilder.toString();
+    }
+
+    public static void addDefaultSerializations(List<WampSerialization> serializations) {
         serializations.add(Json);
         serializations.add(MessagePack);
+    }
+    
+    private final static List<WampSerialization> defaultSerializationList;
+    static {
+        List<WampSerialization> l = new ArrayList<WampSerialization>();
+        addDefaultSerializations(l);
+        defaultSerializationList = Collections.unmodifiableList(l);
+    }
+    
+    public static List<WampSerialization> defaultSerializations() {
+         return defaultSerializationList;
     }
 }

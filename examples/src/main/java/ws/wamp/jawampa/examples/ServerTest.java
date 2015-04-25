@@ -60,8 +60,7 @@ public class ServerTest {
         }
         
         URI serverUri = URI.create("ws://0.0.0.0:8080/ws1");
-        SimpleWampWebsocketListener server = new SimpleWampWebsocketListener(router, serverUri, null);
-        server.start();
+        SimpleWampWebsocketListener server;
 
         WampClientBuilder builder = new WampClientBuilder();
 
@@ -69,6 +68,9 @@ public class ServerTest {
         final WampClient client1;
         final WampClient client2;
         try {
+            server = new SimpleWampWebsocketListener(router, serverUri, null);
+            server.start();
+            
             builder.withUri("ws://localhost:8080/ws1")
                    .withRealm("realm1")
                    .withInfiniteReconnects()

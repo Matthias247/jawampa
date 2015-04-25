@@ -61,7 +61,7 @@ public class WampClientBuilder {
         roles.add(WampRoles.Callee);
         roles.add(WampRoles.Publisher);
         roles.add(WampRoles.Subscriber);
-        WampSerialization.getDefaultSerializations(serializations);
+        WampSerialization.addDefaultSerializations(serializations);
     }
     
     /**
@@ -174,11 +174,14 @@ public class WampClientBuilder {
      * @param serializations The set of serializations that the client supports.
      * @return The {@link WampClientBuilder} object
      */
-    public WampClientBuilder withSerializations(WampSerialization[] serializations) {
+    public WampClientBuilder withSerializations(WampSerialization[] serializations) throws ApplicationError {
         this.serializations.clear();
         if (serializations == null) return this; // Will throw on build()
         for (WampSerialization serialization : serializations) {
-            this.serializations.add(serialization);
+            if (serialization == WampSerialization.Invalid)
+                throw new ApplicationError(ApplicationError.INVALID_SERIALIZATIONS);
+            if (!this.serializations.contains(serialization))
+                this.serializations.add(serialization);
         }
         return this;
     }

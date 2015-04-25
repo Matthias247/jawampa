@@ -16,24 +16,8 @@
 
 package ws.wamp.jawampa.transport;
 
-import ws.wamp.jawampa.WampSerialization;
-
-import java.util.List;
-
 public class WampHandlerConfiguration {
     
     /** The maximum allowed websocket frame size for WAMP messages */
     final static int MAX_WEBSOCKET_FRAME_SIZE = 16*1024*1024; // 16MB
-
-    static String getWebsocketProtocols(List<WampSerialization> serializations) {
-        StringBuilder subProtocolBuilder = new StringBuilder();
-        boolean first = true;
-        for (WampSerialization serialization : serializations) {
-            if (!first) subProtocolBuilder.append(',');
-            first = false;
-            subProtocolBuilder.append(serialization.toString());
-        }
-
-        return subProtocolBuilder.toString();
-    }
 }
