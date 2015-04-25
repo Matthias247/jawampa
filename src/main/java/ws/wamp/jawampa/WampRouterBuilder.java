@@ -52,12 +52,13 @@ public class WampRouterBuilder {
     
     /**
      * Adds a realm that is available through the router.<br>
-     * The realm will provide the Broker and Dealer roles.
+     * The realm will provide the Broker and Dealer roles and will use
+     * loose Uri validation rules.
      * @param realmName The name of the realm. Must be a valid WAMP Uri.
      * @return This WampRouterBuilder object
      */
     public WampRouterBuilder addRealm(String realmName) throws ApplicationError {
-        return addRealm(realmName, new WampRoles[] { WampRoles.Broker, WampRoles.Dealer } );
+        return addRealm(realmName, new WampRoles[] { WampRoles.Broker, WampRoles.Dealer }, false);
     }
     
     /**
@@ -65,14 +66,16 @@ public class WampRouterBuilder {
      * @param realmName The name of the realm. Must be a valid WAMP Uri.
      * @param roles The roles that are exposed through the router.<br>
      * Must be Broker, Dealer or Both.
+     * @param useStrictUriValidation True if strict Uri validation rules shall
+     * be used within this realm, false if loose validation rules shall be applied 
      * @return This WampRouterBuilder object
      */
-    public WampRouterBuilder addRealm(String realmName, WampRoles[] roles) throws ApplicationError {
+    public WampRouterBuilder addRealm(String realmName, WampRoles[] roles, boolean useStrictUriValidation) throws ApplicationError {
         if (realmName == null || roles == null)
             throw new ApplicationError(ApplicationError.INVALID_REALM);
         
         // Validate the realm name
-        if (!UriValidator.tryValidate(realmName) || this.realms.containsKey(realmName))
+        if (!UriValidator.tryValidate(realmName, useStrictUriValidation) || this.realms.containsKey(realmName))
             throw new ApplicationError(ApplicationError.INVALID_REALM);
         
         // Validate and copy the roles
@@ -87,12 +90,11 @@ public class WampRouterBuilder {
         if (roleSet.size() == 0)
             throw new ApplicationError(ApplicationError.INVALID_REALM);
         
-        RealmConfig realmConfig = new RealmConfig(roleSet);
+        RealmConfig realmConfig = new RealmConfig(roleSet, useStrictUriValidation);
         
         // Insert the new realm configuration
         this.realms.put(realmName, realmConfig);
         
         return this;
     }
-
 }

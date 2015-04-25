@@ -355,7 +355,7 @@ public class WampRouter {
             // Verify the message
             CallMessage call = (CallMessage) msg;
             String err = null;
-            if (!UriValidator.tryValidate(call.procedure)) {
+            if (!UriValidator.tryValidate(call.procedure, handler.realm.config.useStrictUriValidation)) {
                 // Client sent an invalid URI
                 err = ApplicationError.INVALID_URI;
             }
@@ -416,7 +416,7 @@ public class WampRouter {
                 return;
             }
             if (err.requestType == InvocationMessage.ID) {
-                if (!UriValidator.tryValidate(err.error)) {
+                if (!UriValidator.tryValidate(err.error, handler.realm.config.useStrictUriValidation)) {
                     // The Message provider has sent us an invalid URI for the error string
                     // We better don't forward it but instead close the connection, which will
                     // give the original caller an unknown message error
@@ -442,7 +442,7 @@ public class WampRouter {
             // Verify the message
             RegisterMessage reg = (RegisterMessage) msg;
             String err = null;
-            if (!UriValidator.tryValidate(reg.procedure)) {
+            if (!UriValidator.tryValidate(reg.procedure, handler.realm.config.useStrictUriValidation)) {
                 // Client sent an invalid URI
                 err = ApplicationError.INVALID_URI;
             }
@@ -539,7 +539,7 @@ public class WampRouter {
             // Verify the message
             SubscribeMessage sub = (SubscribeMessage) msg;
             String err = null;
-            if (!UriValidator.tryValidate(sub.topic)) {
+            if (!UriValidator.tryValidate(sub.topic, handler.realm.config.useStrictUriValidation)) {
                 // Client sent an invalid URI
                 err = ApplicationError.INVALID_URI;
             }
@@ -634,7 +634,7 @@ public class WampRouter {
                 sendAcknowledge = true;
             
             String err = null;
-            if (!UriValidator.tryValidate(pub.topic)) {
+            if (!UriValidator.tryValidate(pub.topic, handler.realm.config.useStrictUriValidation)) {
                 // Client sent an invalid URI
                 err = ApplicationError.INVALID_URI;
             }
@@ -687,7 +687,7 @@ public class WampRouter {
         
         String errorMsg = null;
         Realm realm = null;
-        if (!UriValidator.tryValidate(hello.realm)) {
+        if (!UriValidator.tryValidate(hello.realm, false)) {
             errorMsg = ApplicationError.INVALID_URI;
         } else {
             realm = realms.get(hello.realm);

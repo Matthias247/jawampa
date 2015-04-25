@@ -28,14 +28,16 @@ import ws.wamp.jawampa.WampRoles;
 public class RealmConfig {
 
     public final Set<WampRoles> roles;
+    public final boolean useStrictUriValidation;
     
     public Set<WampRoles> roles() {
         return roles;
     }
     
-    public RealmConfig(Set<WampRoles> roles)  {
+    public RealmConfig(Set<WampRoles> roles, boolean useStrictUriValidation)  {
         // Copy the roles
         this.roles = Collections.unmodifiableSet(new HashSet<WampRoles>(roles));
+        this.useStrictUriValidation = useStrictUriValidation;
     }
 
 }

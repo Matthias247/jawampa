@@ -109,7 +109,7 @@ public class Request {
         int replyWasSent = replySentUpdater.getAndSet(this, 1);
         if (replyWasSent == 1) return;
         
-        UriValidator.validate(errorUri);
+        UriValidator.validate(errorUri, false);
         
         final ErrorMessage msg = new ErrorMessage(WampMessages.InvocationMessage.ID, 
                                                   requestId, null, errorUri,

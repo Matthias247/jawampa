@@ -113,6 +113,7 @@ public class WampClient {
 
     final URI routerUri;
     final String realm;
+    final boolean useStrictUriValidation;
     
     /** Returns the URI of the router to which this client is connected */
     public URI routerUri() {
@@ -207,6 +208,7 @@ public class WampClient {
     
     
     WampClient(URI routerUri, String realm, WampRoles[] roles,
+               boolean useStrictUriValidation,
                boolean closeClientOnErrors,
                WampClientChannelFactory channelFactory,
                int nrReconnects, int reconnectInterval)
@@ -225,6 +227,7 @@ public class WampClient {
         this.routerUri = routerUri;
         this.realm = realm;
         this.clientRoles = roles;
+        this.useStrictUriValidation = useStrictUriValidation;
         this.closeClientOnErrors = closeClientOnErrors;
         this.channelFactory = channelFactory;
         this.totalNrReconnects = nrReconnects;
@@ -798,7 +801,7 @@ public class WampClient {
         final AsyncSubject<Long> resultSubject = AsyncSubject.create();
         
         try {
-            UriValidator.validate(topic);
+            UriValidator.validate(topic, useStrictUriValidation);
         }
         catch (WampError e) {
             resultSubject.onError(e);
@@ -847,7 +850,7 @@ public class WampClient {
             @Override
             public void call(final Subscriber<? super Request> subscriber) {
                 try {
-                    UriValidator.validate(topic);
+                    UriValidator.validate(topic, useStrictUriValidation);
                 }
                 catch (WampError e) {
                     subscriber.onError(e);
@@ -1049,7 +1052,7 @@ public class WampClient {
             @Override
             public void call(final Subscriber<? super PubSubData> subscriber) {
                 try {
-                    UriValidator.validate(topic);
+                    UriValidator.validate(topic, useStrictUriValidation);
                 }
                 catch (WampError e) {
                     subscriber.onError(e);
@@ -1221,7 +1224,7 @@ public class WampClient {
         final AsyncSubject<Reply> resultSubject = AsyncSubject.create();
         
         try {
-            UriValidator.validate(procedure);
+            UriValidator.validate(procedure, useStrictUriValidation);
         }
         catch (WampError e) {
             resultSubject.onError(e);

@@ -40,6 +40,7 @@ public class WampClientBuilder {
     SslContext sslContext;
     int nrReconnects = 0;
     int reconnectInterval = DEFAULT_RECONNECT_INTERVAL;
+    boolean useStrictUriValidation = false;
     boolean closeOnErrors = true;
     Set<WampRoles> roles = new HashSet<WampRoles>();
     
@@ -82,7 +83,7 @@ public class WampClientBuilder {
             throw new ApplicationError(ApplicationError.INVALID_REALM);
         
         try {
-            UriValidator.validate(realm);
+            UriValidator.validate(realm, useStrictUriValidation);
         } catch (Exception e) {
             throw new ApplicationError(ApplicationError.INVALID_REALM);
         }
@@ -102,7 +103,8 @@ public class WampClientBuilder {
         WampClientChannelFactory channelFactory = 
             WampClientChannelFactoryResolver.getFactory(routerUri, sslContext);
         
-        return new WampClient(routerUri, realm, rolesArray, closeOnErrors, 
+        return new WampClient(routerUri, realm, rolesArray,
+                useStrictUriValidation, closeOnErrors, 
                 channelFactory, nrReconnects, reconnectInterval);
     }
     
@@ -110,7 +112,7 @@ public class WampClientBuilder {
      * Sets the address of the router to which the new client shall connect.
      * @param uri The address of the router, e.g. ws://wamp.ws/ws
      * @return The {@link WampClientBuilder} object
-     * @deprecated This method existed only due to a typo will be removed
+     * @deprecated This method existed only due to a typo and will be removed
      */
     public WampClientBuilder witUri(String uri) {
         this.uri = uri;
@@ -128,7 +130,7 @@ public class WampClientBuilder {
     }
     
     /**
-     * Sets the name of the realm on the router which shall be used for the sesion.
+     * Sets the name of the realm on the router which shall be used for the session.
      * @param realm The name of the realm to which shall be connected.
      * @return The {@link WampClientBuilder} object
      */
@@ -151,6 +153,19 @@ public class WampClientBuilder {
         for (WampRoles role : roles) {
             this.roles.add(role);
         }
+        return this;
+    }
+    
+    /**
+     * Allows to activate or deactivate the validation of all WAMP Uris according to the
+     * strict URI validation rules which are described in the WAMP specification.
+     * By default the loose Uri validation rules will be used.
+     * @param useStrictUriValidation true if strict Uri validation rules shall be applied,
+     * false if loose Uris shall be used.
+     * @return The {@link WampClientBuilder} object
+     */
+    public WampClientBuilder withStrictUriValidation(boolean useStrictUriValidation) {
+        this.useStrictUriValidation = useStrictUriValidation;
         return this;
     }
     
