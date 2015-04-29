@@ -73,6 +73,7 @@ import ws.wamp.jawampa.internal.IdGenerator;
 import ws.wamp.jawampa.internal.IdValidator;
 import ws.wamp.jawampa.internal.Promise;
 import ws.wamp.jawampa.internal.UriValidator;
+import ws.wamp.jawampa.internal.Version;
 import ws.wamp.jawampa.transport.WampChannelEvents;
 import ws.wamp.jawampa.transport.WampClientChannelFactory;
 
@@ -347,6 +348,7 @@ public class WampClient {
                 
                 // Put the requested roles in the Hello message
                 ObjectNode o = objectMapper.createObjectNode();
+                o.put("agent", Version.getVersion());
                 ObjectNode rolesNode = o.putObject("roles");
                 for (WampRoles role : clientRoles) {
                     ObjectNode roleNode = rolesNode.putObject(role.toString());
