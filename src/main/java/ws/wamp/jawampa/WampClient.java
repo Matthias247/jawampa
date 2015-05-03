@@ -27,6 +27,7 @@ import io.netty.channel.nio.NioEventLoopGroup;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -173,12 +174,14 @@ public class WampClient {
     
     static class SubscriptionMapEntry {
         public PubSubState state;
+        public final SubscriptionFlags flags;
         public long subscriptionId = 0;
         
         public final List<Subscriber<? super PubSubData>> subscribers
             = new ArrayList<Subscriber<? super PubSubData>>();
         
-        public SubscriptionMapEntry(PubSubState state) {
+        public SubscriptionMapEntry(SubscriptionFlags flags, PubSubState state) {
+            this.flags = flags;
             this.state = state;
         }
     }
@@ -196,9 +199,9 @@ public class WampClient {
     
     HashMap<Long, RequestMapEntry> requestMap = 
         new HashMap<Long, WampClient.RequestMapEntry>();
-    
-    HashMap<String, SubscriptionMapEntry> subscriptionsByUri =
-        new HashMap<String, SubscriptionMapEntry>();
+
+    EnumMap<SubscriptionFlags, HashMap<String, SubscriptionMapEntry>> subscriptionsByFlags =
+        new EnumMap<SubscriptionFlags, HashMap<String, SubscriptionMapEntry>>(SubscriptionFlags.class);
     HashMap<Long, SubscriptionMapEntry> subscriptionsBySubscriptionId =
         new HashMap<Long, SubscriptionMapEntry>();
     
@@ -233,6 +236,10 @@ public class WampClient {
         this.channelFactory = channelFactory;
         this.totalNrReconnects = nrReconnects;
         this.reconnectInterval = reconnectInterval;
+
+        subscriptionsByFlags.put(SubscriptionFlags.Exact, new HashMap<String, SubscriptionMapEntry>());
+        subscriptionsByFlags.put(SubscriptionFlags.Prefix, new HashMap<String, SubscriptionMapEntry>());
+        subscriptionsByFlags.put(SubscriptionFlags.Wildcard, new HashMap<String, SubscriptionMapEntry>());
     }
 
     private void completeStatus(Exception e) {
@@ -355,6 +362,9 @@ public class WampClient {
                     if (role == WampRoles.Publisher ) {
                         ObjectNode featuresNode = roleNode.putObject("features");
                         featuresNode.put("publisher_exclusion", true);
+                    } else if (role == WampRoles.Subscriber) {
+                        ObjectNode featuresNode = roleNode.putObject("features");
+                        featuresNode.put("pattern_based_subscription", true);
                     }
                 }
                 
@@ -645,7 +655,7 @@ public class WampClient {
                 EventMessage ev = (EventMessage)msg;
                 SubscriptionMapEntry entry = subscriptionsBySubscriptionId.get(ev.subscriptionId);
                 if (entry == null || entry.state != PubSubState.Subscribed) return; // Ignore the result
-                PubSubData evResult = new PubSubData(ev.arguments, ev.argumentsKw);
+                PubSubData evResult = new PubSubData(ev.details, ev.arguments, ev.argumentsKw);
                 // publish the event
                 for (Subscriber<? super PubSubData> s : entry.subscribers) {
                     s.onNext(evResult);
@@ -738,14 +748,16 @@ public class WampClient {
     }
     
     private void clearAllSubscriptions(Throwable e) {
-        for (Entry<String, SubscriptionMapEntry> entry : subscriptionsByUri.entrySet()) {
-            for (Subscriber<? super PubSubData> s : entry.getValue().subscribers) {
-                if (e == null) s.onCompleted();
-                else s.onError(e);
+        for (HashMap<String, SubscriptionMapEntry> subscriptionByUri : subscriptionsByFlags.values()) {
+            for (Entry<String, SubscriptionMapEntry> entry : subscriptionByUri.entrySet()) {
+                for (Subscriber<? super PubSubData> s : entry.getValue().subscribers) {
+                    if (e == null) s.onCompleted();
+                    else s.onError(e);
+                }
+                entry.getValue().state = PubSubState.Unsubscribed;
             }
-            entry.getValue().state = PubSubState.Unsubscribed;
+            subscriptionByUri.clear();
         }
-        subscriptionsByUri.clear();
         subscriptionsBySubscriptionId.clear();
     }
     
@@ -809,8 +821,7 @@ public class WampClient {
     /**
      * Publishes an event under the given topic.
      * @param topic The topic that should be used for publishing the event
-     * @param options A WAMP options dictionary. May contain advanced options
-     * for the publish call.
+     * @param flags Additional publish flags if any. This can be null.
      * @param arguments The positional arguments for the published event
      * @param argumentsKw The keyword arguments for the published event.
      * These will only be taken into consideration if arguments is not null.
@@ -819,7 +830,7 @@ public class WampClient {
      * publication ID) and will then be completed or will be completed with
      * an error if the event could not be published.
      */
-    public Observable<Long> publish(final String topic, final ObjectNode options, final ArrayNode arguments,
+    public Observable<Long> publish(final String topic, final PublishFlags flags, final ArrayNode arguments,
         final ObjectNode argumentsKw)
     {
         final AsyncSubject<Long> resultSubject = AsyncSubject.create();
@@ -842,6 +853,12 @@ public class WampClient {
                 
                 final long requestId = IdGenerator.newLinearId(lastRequestId, requestMap);
                 lastRequestId = requestId;
+
+                ObjectNode options = null;
+                if (flags == PublishFlags.DontExcludeMe) {
+                    options = objectMapper.createObjectNode();
+                    options.put("exclude_me", false);
+                }
                 final WampMessages.PublishMessage msg =
                     new WampMessages.PublishMessage(requestId, options, topic, arguments, argumentsKw);
                 
@@ -1030,22 +1047,50 @@ public class WampClient {
      * of the call be Observable&lt;String&gt;.
      * @return An observable that can be used to subscribe on the topic.
      */
-    public <T> Observable<T> makeSubscription(final String topic, final Class<T> eventClass)
+    public <T> Observable<T> makeSubscription(final String topic, final Class<T> eventClass) {
+        return makeSubscription(topic, SubscriptionFlags.Exact, eventClass);
+    }
+
+    /**
+     * Returns an observable that allows to subscribe on the given topic.<br>
+     * The actual subscription will only be made after subscribe() was called
+     * on it.<br>
+     * This version of makeSubscription will automatically transform the
+     * received events data into the type eventClass and will therefore return
+     * a mapped Observable. It will only look at and transform the first
+     * argument of the received events arguments, therefore it can only be used
+     * for events that carry either a single or no argument.<br>
+     * Received publications will be pushed to the Subscriber via it's
+     * onNext method.<br>
+     * The client can unsubscribe from the topic by calling unsubscribe() on
+     * it's Subscription.<br>
+     * If the connection closes onCompleted will be called.<br>
+     * In case of errors during subscription onError will be called.
+     * @param topic The topic to subscribe on.<br>
+     * Must be valid WAMP URI.
+     * @param flags Flags to indicate type of subscription. This cannot be null.
+     * @param eventClass The class type into which the received event argument
+     * should be transformed. E.g. use String.class to let the client try to
+     * transform the first argument into a String and let the return value of
+     * of the call be Observable&lt;String&gt;.
+     * @return An observable that can be used to subscribe on the topic.
+     */
+    public <T> Observable<T> makeSubscription(final String topic, SubscriptionFlags flags, final Class<T> eventClass)
     {
-        return makeSubscription(topic).map(new Func1<PubSubData,T>() {
+        return makeSubscription(topic, flags).map(new Func1<PubSubData,T>() {
             @Override
             public T call(PubSubData ev) {
                 if (eventClass == null || eventClass == Void.class) {
                     // We don't need a value
                     return null;
                 }
-                
+
                 if (ev.arguments == null || ev.arguments.size() < 1)
                     throw OnErrorThrowable.from(new ApplicationError(ApplicationError.MISSING_VALUE));
-                    
+
                 JsonNode eventNode = ev.arguments.get(0);
                 if (eventNode.isNull()) return null;
-                
+
                 T eventValue;
                 try {
                     eventValue = objectMapper.convertValue(eventNode, eventClass);
@@ -1072,11 +1117,30 @@ public class WampClient {
      * @return An observable that can be used to subscribe on the topic.
      */
     public Observable<PubSubData> makeSubscription(final String topic) {
+        return makeSubscription(topic, SubscriptionFlags.Exact);
+    }
+
+    /**
+     * Returns an observable that allows to subscribe on the given topic.<br>
+     * The actual subscription will only be made after subscribe() was called
+     * on it.<br>
+     * Received publications will be pushed to the Subscriber via it's
+     * onNext method.<br>
+     * The client can unsubscribe from the topic by calling unsubscribe() on
+     * it's Subscription.<br>
+     * If the connection closes onCompleted will be called.<br>
+     * In case of errors during subscription onError will be called.
+     * @param topic The topic to subscribe on.<br>
+     * Must be valid WAMP URI.
+     * @param flags Flags to indicate type of subscription. This cannot be null.
+     * @return An observable that can be used to subscribe on the topic.
+     */
+    public Observable<PubSubData> makeSubscription(final String topic, final SubscriptionFlags flags) {
         return Observable.create(new OnSubscribe<PubSubData>() {
             @Override
             public void call(final Subscriber<? super PubSubData> subscriber) {
                 try {
-                    UriValidator.validate(topic, useStrictUriValidation);
+                    UriValidator.validate(topic, useStrictUriValidation, flags == SubscriptionFlags.Wildcard);
                 }
                 catch (WampError e) {
                     subscriber.onError(e);
@@ -1094,7 +1158,7 @@ public class WampClient {
                             return;
                         }
 
-                        final SubscriptionMapEntry entry = subscriptionsByUri.get(topic);
+                        final SubscriptionMapEntry entry = subscriptionsByFlags.get(flags).get(topic);
 
                         if (entry != null) { // We are already subscribed at the dealer
                             entry.subscribers.add(subscriber);
@@ -1107,14 +1171,20 @@ public class WampClient {
                         }
                         else { // need to subscribe
                             // Insert a new entry in the subscription map
-                            final SubscriptionMapEntry newEntry = new SubscriptionMapEntry(PubSubState.Subscribing);
+                            final SubscriptionMapEntry newEntry = new SubscriptionMapEntry(flags, PubSubState.Subscribing);
                             newEntry.subscribers.add(subscriber);
-                            subscriptionsByUri.put(topic, newEntry);
+                            subscriptionsByFlags.get(flags).put(topic, newEntry);
 
                             // Make the subscribe call
                             final long requestId = IdGenerator.newLinearId(lastRequestId, requestMap);
                             lastRequestId = requestId;
-                            final SubscribeMessage msg = new SubscribeMessage(requestId, null, topic);
+
+                            ObjectNode options = null;
+                            if (flags != SubscriptionFlags.Exact) {
+                                options = objectMapper.createObjectNode();
+                                options.put("match", flags.name().toLowerCase());
+                            }
+                            final SubscribeMessage msg = new SubscribeMessage(requestId, options, topic);
 
                             final AsyncSubject<Long> subscribeFuture = AsyncSubject.create();
                             subscribeFuture
@@ -1156,7 +1226,7 @@ public class WampClient {
                                     }
 
                                     newEntry.subscribers.clear();
-                                    subscriptionsByUri.remove(topic);
+                                    subscriptionsByFlags.get(flags).remove(topic);
                                 }
                             });
 
@@ -1192,7 +1262,7 @@ public class WampClient {
                         {
                             // We removed the last subscriber and can therefore unsubscribe from the dealer
                             mapEntry.state = PubSubState.Unsubscribing;
-                            subscriptionsByUri.remove(topic);
+                            subscriptionsByFlags.get(mapEntry.flags).remove(topic);
                             subscriptionsBySubscriptionId.remove(mapEntry.subscriptionId);
                             
                             // Make the unsubscribe call

@@ -20,10 +20,15 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 public class PubSubData {
-    
+
+    final ObjectNode details;
     final ArrayNode arguments;
     final ObjectNode keywordArguments;
-    
+
+    public ObjectNode details() {
+        return details;
+    }
+
     public ArrayNode arguments() {
         return arguments;
     }
@@ -32,7 +37,8 @@ public class PubSubData {
         return keywordArguments;
     }
 
-    public PubSubData(ArrayNode arguments, ObjectNode keywordArguments) {
+    public PubSubData(ObjectNode details, ArrayNode arguments, ObjectNode keywordArguments) {
+        this.details = details;
         this.arguments = arguments;
         this.keywordArguments = keywordArguments;
     }
