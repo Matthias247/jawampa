@@ -27,6 +27,7 @@ import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -70,12 +71,16 @@ public class WampRouter {
         final Map<String, Procedure> procedures = new HashMap<String, Procedure>();
         
         // Fields that are used for implementing subscription functionality
-        final Map<String, Subscription> subscriptionsByTopic = new HashMap<String, Subscription>();
+        final EnumMap<SubscriptionFlags, Map<String, Subscription>> subscriptionsByFlags
+                = new EnumMap<SubscriptionFlags, Map<String, Subscription>>(SubscriptionFlags.class);
         final Map<Long, Subscription> subscriptionsById = new HashMap<Long, Subscription>();
         long lastUsedSubscriptionId = IdValidator.MIN_VALID_ID;
         
         public Realm(RealmConfig config) {
             this.config = config;
+            subscriptionsByFlags.put(SubscriptionFlags.Exact, new HashMap<String, Subscription>());
+            subscriptionsByFlags.put(SubscriptionFlags.Prefix, new HashMap<String, Subscription>());
+            subscriptionsByFlags.put(SubscriptionFlags.Wildcard, new HashMap<String, Subscription>());
         }
         
         void includeChannel(WampRouterHandler channel, long sessionId, Set<WampRoles> roles) {
@@ -94,7 +99,7 @@ public class WampRouter {
                     sub.subscribers.remove(channel);
                     if (sub.subscribers.isEmpty()) {
                         // Subscription is no longer used by any client
-                        subscriptionsByTopic.remove(sub.topic);
+                        subscriptionsByFlags.get(sub.flags).remove(sub.topic);
                         subscriptionsById.remove(sub.subscriptionId);
                     }
                 }
@@ -154,11 +159,15 @@ public class WampRouter {
     
     static class Subscription {
         final String topic;
+        final SubscriptionFlags flags;
+        final String components[]; // non-null only for wildcard type
         final long subscriptionId;
         final Set<WampRouterHandler> subscribers;
         
-        public Subscription(String topic, long subscriptionId) {
+        public Subscription(String topic, SubscriptionFlags flags, long subscriptionId) {
             this.topic = topic;
+            this.flags = flags;
+            this.components = flags == SubscriptionFlags.Wildcard ? topic.split("\\.", -1) : null;
             this.subscriptionId = subscriptionId;
             this.subscribers = new HashSet<WampRouterHandler>();
         }
@@ -210,7 +219,7 @@ public class WampRouter {
             }
         });
         this.scheduler = Schedulers.from(eventLoop);
-        
+
         idleChannels = new DefaultChannelGroup(eventLoop.next());
     }
     
@@ -546,7 +555,21 @@ public class WampRouter {
             // Verify the message
             SubscribeMessage sub = (SubscribeMessage) msg;
             String err = null;
-            if (!UriValidator.tryValidate(sub.topic, handler.realm.config.useStrictUriValidation)) {
+
+            // Find subscription match type
+            SubscriptionFlags flags = SubscriptionFlags.Exact;
+            if (sub.options != null) {
+                JsonNode match = sub.options.get("match");
+                if (match != null) {
+                    String matchValue = match.asText();
+                    if ("prefix".equals(matchValue)) {
+                        flags = SubscriptionFlags.Prefix;
+                    } else if ("wildcard".equals(matchValue)) {
+                        flags = SubscriptionFlags.Wildcard;
+                    }
+                }
+            }
+            if (!UriValidator.tryValidate(sub.topic, handler.realm.config.useStrictUriValidation, flags == SubscriptionFlags.Wildcard)) {
                 // Client sent an invalid URI
                 err = ApplicationError.INVALID_URI;
             }
@@ -567,9 +590,10 @@ public class WampRouter {
             if (handler.subscriptionsById == null) {
                 handler.subscriptionsById = new HashMap<Long, WampRouter.Subscription>();
             }
-            
+
             // Search if a subscription from any client on the realm to this topic exists
-            Subscription subscription = handler.realm.subscriptionsByTopic.get(sub.topic);
+            Map<String, Subscription> subscriptionMap = handler.realm.subscriptionsByFlags.get(flags);
+            Subscription subscription = subscriptionMap.get(sub.topic);
             if (subscription == null) {
                 // No client was subscribed to this URI up to now
                 // Create a new subscription id
@@ -577,11 +601,11 @@ public class WampRouter {
                                                               handler.realm.subscriptionsById);
                 handler.realm.lastUsedSubscriptionId = subscriptionId;
                 // Create and add the new subscription
-                subscription = new Subscription(sub.topic, subscriptionId);
-                handler.realm.subscriptionsByTopic.put(sub.topic, subscription);
+                subscription = new Subscription(sub.topic, flags, subscriptionId);
+                subscriptionMap.put(sub.topic, subscription);
                 handler.realm.subscriptionsById.put(subscriptionId, subscription);
             }
-            
+
             // We check if the client is already subscribed to this topic by trying to add the
             // new client as a receiver. If the client is already a receiver we do nothing
             // (already subscribed and already stored in handler.subscriptionsById). Calling
@@ -636,7 +660,7 @@ public class WampRouter {
             
             // Remove the subscription from the realm if no subscriber is left
             if (s.subscribers.isEmpty()) {
-                handler.realm.subscriptionsByTopic.remove(s.topic);
+                handler.realm.subscriptionsByFlags.get(s.flags).remove(s.topic);
                 handler.realm.subscriptionsById.remove(s.subscriptionId);
             }
             
@@ -676,30 +700,69 @@ public class WampRouter {
             long publicationId = IdGenerator.newRandomId(null); // Store that somewhere?
 
             // Get the subscriptions for this topic on the realm
-            Subscription subscription = handler.realm.subscriptionsByTopic.get(pub.topic);
-            if (subscription != null) {
-                for (WampRouterHandler receiver : subscription.subscribers) {
-                    if (receiver == handler) { // Potentially skip the publisher
-                        boolean skipPublisher = true;
-                        if (pub.options != null) {
-                            JsonNode excludeMeNode = pub.options.get("exclude_me");
-                            if (excludeMeNode != null) {
-                                skipPublisher = excludeMeNode.asBoolean(true);
-                            }
-                        }
-                        if (skipPublisher) continue;
-                    }
-                    // Publish the event to the subscriber
-                    EventMessage ev = new EventMessage(subscription.subscriptionId, publicationId,
-                        null, pub.arguments, pub.argumentsKw);
-                    receiver.ctx.writeAndFlush(ev);
+            Subscription exactSubscription = handler.realm.subscriptionsByFlags.get(SubscriptionFlags.Exact).get(pub.topic);
+            if (exactSubscription != null) {
+                publishEvent(handler, pub, publicationId, exactSubscription);
+            }
+
+            Map<String, Subscription> prefixSubscriptionMap = handler.realm.subscriptionsByFlags.get(SubscriptionFlags.Prefix);
+            for (Subscription prefixSubscription : prefixSubscriptionMap.values()) {
+                if (pub.topic.startsWith(prefixSubscription.topic)) {
+                    publishEvent(handler, pub, publicationId, prefixSubscription);
                 }
             }
-            
+
+            Map<String, Subscription> wildcardSubscriptionMap = handler.realm.subscriptionsByFlags.get(SubscriptionFlags.Wildcard);
+            String[] components = pub.topic.split("\\.", -1);
+            for (Subscription wildcardSubscription : wildcardSubscriptionMap.values()) {
+                boolean matched = true;
+                if (components.length == wildcardSubscription.components.length) {
+                    for (int i=0; i < components.length; i++) {
+                        if (wildcardSubscription.components[i].length() > 0
+                                && !components[i].equals(wildcardSubscription.components[i])) {
+                            matched = false;
+                            break;
+                        }
+                    }
+                }else
+                    matched = false;
+
+                if (matched) {
+                    publishEvent(handler, pub, publicationId, wildcardSubscription);
+                }
+            }
+
             if (sendAcknowledge) {
                 PublishedMessage response = new PublishedMessage(pub.requestId, publicationId);
                 handler.ctx.writeAndFlush(response);
             }
+        }
+    }
+
+    private void publishEvent(WampRouterHandler publisher, PublishMessage pub, long publicationId, Subscription subscription){
+        ObjectNode details = null;
+        if (subscription.flags != SubscriptionFlags.Exact) {
+            details = objectMapper.createObjectNode();
+            details.put("topic", pub.topic);
+        }
+
+        EventMessage ev = new EventMessage(subscription.subscriptionId, publicationId,
+                details, pub.arguments, pub.argumentsKw);
+
+        for (WampRouterHandler receiver : subscription.subscribers) {
+            if (receiver == publisher ) { // Potentially skip the publisher
+                boolean skipPublisher = true;
+                if (pub.options != null) {
+                    JsonNode excludeMeNode = pub.options.get("exclude_me");
+                    if (excludeMeNode != null) {
+                        skipPublisher = excludeMeNode.asBoolean(true);
+                    }
+                }
+                if (skipPublisher) continue;
+            }
+
+            // Publish the event to the subscriber
+            receiver.ctx.writeAndFlush(ev);
         }
     }
     
@@ -765,9 +828,12 @@ public class WampRouter {
         ObjectNode routerRoles = welcomeDetails.putObject("roles");
         for (WampRoles role : realm.config.roles) {
             ObjectNode roleNode = routerRoles.putObject(role.toString());
-            if (role == WampRoles.Publisher ) {
+            if (role == WampRoles.Publisher) {
                 ObjectNode featuresNode = roleNode.putObject("features");
                 featuresNode.put("publisher_exclusion", true);
+            } else if (role == WampRoles.Subscriber) {
+                ObjectNode featuresNode = roleNode.putObject("features");
+                featuresNode.put("pattern_based_subscription", true);
             }
         }
         
