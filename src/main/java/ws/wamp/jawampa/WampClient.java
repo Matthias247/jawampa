@@ -1140,7 +1140,13 @@ public class WampClient {
             @Override
             public void call(final Subscriber<? super PubSubData> subscriber) {
                 try {
-                    UriValidator.validate(topic, useStrictUriValidation, flags == SubscriptionFlags.Wildcard);
+                    if (flags == SubscriptionFlags.Exact) {
+                        UriValidator.validate(topic, useStrictUriValidation);
+                    } else if (flags == SubscriptionFlags.Prefix) {
+                        UriValidator.validatePrefix(topic, useStrictUriValidation);
+                    } else if (flags == SubscriptionFlags.Wildcard) {
+                        UriValidator.validateWildcard(topic, useStrictUriValidation);
+                    }
                 }
                 catch (WampError e) {
                     subscriber.onError(e);

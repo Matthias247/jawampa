@@ -569,11 +569,24 @@ public class WampRouter {
                     }
                 }
             }
-            if (!UriValidator.tryValidate(sub.topic, handler.realm.config.useStrictUriValidation, flags == SubscriptionFlags.Wildcard)) {
-                // Client sent an invalid URI
-                err = ApplicationError.INVALID_URI;
+
+            if (flags == SubscriptionFlags.Exact) {
+               if (!UriValidator.tryValidate(sub.topic, handler.realm.config.useStrictUriValidation)) {
+                   // Client sent an invalid URI
+                   err = ApplicationError.INVALID_URI;
+               }
+            } else if (flags == SubscriptionFlags.Prefix) {
+               if (!UriValidator.tryValidatePrefix(sub.topic, handler.realm.config.useStrictUriValidation)) {
+                   // Client sent an invalid URI
+                   err = ApplicationError.INVALID_URI;
+               }
+            } else if (flags == SubscriptionFlags.Wildcard) {
+               if (!UriValidator.tryValidateWildcard(sub.topic, handler.realm.config.useStrictUriValidation)) {
+                   // Client sent an invalid URI
+                   err = ApplicationError.INVALID_URI;
+               }
             }
-            
+
             if (err == null && !(IdValidator.isValidId(sub.requestId))) {
                 // Client sent an invalid request ID
                 err = ApplicationError.INVALID_ARGUMENT;
