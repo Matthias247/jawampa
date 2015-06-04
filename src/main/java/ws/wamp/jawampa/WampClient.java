@@ -378,12 +378,16 @@ public class WampClient {
                         featuresNode.put("pattern_based_subscription", true);
                     }
                 }
+                
+                // Insert authentication data
                 if(authId != null) {
                     o.put("authid", authId);
                 }
-                ArrayNode authMethodsNode = o.putArray("authmethods");
-                for(ClientSideAuthentication authMethod : authMethods) {
-                    authMethodsNode.add(authMethod.getAuthMethod());
+                if (authMethods != null && authMethods.size() != 0) {
+                    ArrayNode authMethodsNode = o.putArray("authmethods");
+                    for(ClientSideAuthentication authMethod : authMethods) {
+                        authMethodsNode.add(authMethod.getAuthMethod());
+                    }
                 }
                 
                 ctx.writeAndFlush(new WampMessages.HelloMessage(realm, o));
