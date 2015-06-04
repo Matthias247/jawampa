@@ -61,8 +61,8 @@ public class WampMessages {
             map.put(HelloMessage.ID, new HelloMessage.Factory());
             map.put(WelcomeMessage.ID, new WelcomeMessage.Factory());
             map.put(AbortMessage.ID, new AbortMessage.Factory());
-            // .put(MessageType.ID, new ChallengeMessage.Factory());
-            // map.put(MessageType.ID, new AuthenticateMessage.Factory());
+            map.put(ChallengeMessage.ID, new ChallengeMessage.Factory());
+            map.put(AuthenticateMessage.ID, new AuthenticateMessage.Factory());
             map.put(GoodbyeMessage.ID, new GoodbyeMessage.Factory());
             // map.put(MessageType.ID, new HeartbeatMessage.Factory());
             map.put(ErrorMessage.ID, new ErrorMessage.Factory());
@@ -205,6 +205,86 @@ public class WampMessages {
                 ObjectNode details = (ObjectNode) messageNode.get(1);
                 String reason = messageNode.get(2).asText();
                 return new AbortMessage(details, reason);
+            }
+        }
+    }
+
+    /**
+     * During authenticated session establishment, a Router sends a challenge message.
+     * Format: [CHALLENGE, AuthMethod|string, Extra|dict]
+     */
+    public static class ChallengeMessage extends WampMessage {
+        final static int ID = 4;
+        String authMethod;
+        ObjectNode extra;
+
+        public ChallengeMessage(String authMethod, ObjectNode extra) {
+            this.authMethod = authMethod;
+            this.extra = extra;
+        }
+
+        public JsonNode toObjectArray(ObjectMapper mapper) throws WampError {
+            ArrayNode messageNode = mapper.createArrayNode();
+            messageNode.add(ID);
+            messageNode.add(authMethod);
+            if (extra != null)
+                messageNode.add(extra);
+            else
+                messageNode.add(mapper.createObjectNode());
+            return messageNode;
+        }
+
+        static class Factory implements WampMessageFactory {
+            @Override
+            public WampMessage fromObjectArray(ArrayNode messageNode) throws WampError {
+                if (messageNode.size() != 3
+                        || !messageNode.get(1).isTextual()
+                        || !messageNode.get(2).isObject())
+                    throw new WampError(ApplicationError.INVALID_MESSAGE);
+
+                String authMethod = messageNode.get(1).asText();
+                ObjectNode extra = (ObjectNode) messageNode.get(2);
+                return new ChallengeMessage(authMethod, extra);
+            }
+        }
+    }
+
+    /**
+     * A Client having received a challenge is expected to respond by sending a signature or token.
+     * Format: [AUTHENTICATE, Signature|string, Extra|dict]
+     */
+    public static class AuthenticateMessage extends WampMessage {
+        final static int ID = 5;
+        String signature;
+        ObjectNode extra;
+
+        public AuthenticateMessage(String signature, ObjectNode extra) {
+            this.signature = signature;
+            this.extra = extra;
+        }
+
+        public JsonNode toObjectArray(ObjectMapper mapper) throws WampError {
+            ArrayNode messageNode = mapper.createArrayNode();
+            messageNode.add(ID);
+            messageNode.add(signature);
+            if (extra != null)
+                messageNode.add(extra);
+            else
+                messageNode.add(mapper.createObjectNode());
+            return messageNode;
+        }
+
+        static class Factory implements WampMessageFactory {
+            @Override
+            public WampMessage fromObjectArray(ArrayNode messageNode) throws WampError {
+                if (messageNode.size() != 3
+                        || !messageNode.get(1).isTextual()
+                        || !messageNode.get(2).isObject())
+                    throw new WampError(ApplicationError.INVALID_MESSAGE);
+
+                String signature = messageNode.get(1).asText();
+                ObjectNode extra = (ObjectNode) messageNode.get(2);
+                return new AuthenticateMessage(signature, extra);
             }
         }
     }

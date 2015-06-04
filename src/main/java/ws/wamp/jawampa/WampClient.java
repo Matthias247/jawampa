@@ -37,6 +37,7 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+
 import rx.Observable;
 import rx.Observable.OnSubscribe;
 import rx.Observer;
@@ -53,7 +54,9 @@ import rx.subjects.BehaviorSubject;
 import rx.subscriptions.CompositeSubscription;
 import rx.subscriptions.Subscriptions;
 import ws.wamp.jawampa.WampMessages.AbortMessage;
+import ws.wamp.jawampa.WampMessages.AuthenticateMessage;
 import ws.wamp.jawampa.WampMessages.CallMessage;
+import ws.wamp.jawampa.WampMessages.ChallengeMessage;
 import ws.wamp.jawampa.WampMessages.ErrorMessage;
 import ws.wamp.jawampa.WampMessages.EventMessage;
 import ws.wamp.jawampa.WampMessages.GoodbyeMessage;
@@ -70,6 +73,7 @@ import ws.wamp.jawampa.WampMessages.UnsubscribeMessage;
 import ws.wamp.jawampa.WampMessages.UnsubscribedMessage;
 import ws.wamp.jawampa.WampMessages.WampMessage;
 import ws.wamp.jawampa.WampMessages.WelcomeMessage;
+import ws.wamp.jawampa.auth.client.ClientSideAuthentication;
 import ws.wamp.jawampa.internal.IdGenerator;
 import ws.wamp.jawampa.internal.IdValidator;
 import ws.wamp.jawampa.internal.Promise;
@@ -143,6 +147,9 @@ public class WampClient {
     int remainingNrReconnects = 0;
     Subscription reconnectSubscription;
     
+    final String authId;
+    final List<ClientSideAuthentication> authMethods;
+    
     long sessionId;
     ObjectNode welcomeDetails = null;
     final WampRoles[] clientRoles;
@@ -215,7 +222,8 @@ public class WampClient {
                boolean useStrictUriValidation,
                boolean closeClientOnErrors,
                WampClientChannelFactory channelFactory,
-               int nrReconnects, int reconnectInterval)
+               int nrReconnects, int reconnectInterval,
+               String authId, List<ClientSideAuthentication> authMethods)
     {
         // Create an eventloop and the RX scheduler on top of it
         this.eventLoop = new NioEventLoopGroup(1, new ThreadFactory() {
@@ -236,6 +244,8 @@ public class WampClient {
         this.channelFactory = channelFactory;
         this.totalNrReconnects = nrReconnects;
         this.reconnectInterval = reconnectInterval;
+        this.authId = authId;
+        this.authMethods = new ArrayList<ClientSideAuthentication>(authMethods);
 
         subscriptionsByFlags.put(SubscriptionFlags.Exact, new HashMap<String, SubscriptionMapEntry>());
         subscriptionsByFlags.put(SubscriptionFlags.Prefix, new HashMap<String, SubscriptionMapEntry>());
@@ -356,6 +366,7 @@ public class WampClient {
                 // Put the requested roles in the Hello message
                 ObjectNode o = objectMapper.createObjectNode();
                 o.put("agent", Version.getVersion());
+                
                 ObjectNode rolesNode = o.putObject("roles");
                 for (WampRoles role : clientRoles) {
                     ObjectNode roleNode = rolesNode.putObject(role.toString());
@@ -366,6 +377,13 @@ public class WampClient {
                         ObjectNode featuresNode = roleNode.putObject("features");
                         featuresNode.put("pattern_based_subscription", true);
                     }
+                }
+                if(authId != null) {
+                    o.put("authid", authId);
+                }
+                ArrayNode authMethodsNode = o.putArray("authmethods");
+                for(ClientSideAuthentication authMethod : authMethods) {
+                    authMethodsNode.add(authMethod.getAuthMethod());
                 }
                 
                 ctx.writeAndFlush(new WampMessages.HelloMessage(realm, o));
@@ -565,6 +583,23 @@ public class WampClient {
                 status = Status.Connected;
                 statusObservable.onNext(status);
             }
+            else if (msg instanceof ChallengeMessage) {
+                ChallengeMessage challenge = (ChallengeMessage) msg;
+                String authMethodString = challenge.authMethod;
+                
+                for ( ClientSideAuthentication authMethod : authMethods ) {
+                    if (authMethod.getAuthMethod().equals( authMethodString )) {
+                        AuthenticateMessage reply = authMethod.handleChallenge( challenge, objectMapper );
+                        if ( reply == null ) {
+                            onProtocolError();
+                        } else {
+                            channel.writeAndFlush(reply);
+                        }
+                        return;
+                    }
+                }
+                onProtocolError();
+            }
             else if (msg instanceof AbortMessage) {
                 // The remote doesn't want us to connect :(
                 AbortMessage abort = (AbortMessage) msg;
@@ -574,6 +609,9 @@ public class WampClient {
         else {
             // We were already welcomed
             if (msg instanceof WelcomeMessage) {
+                onProtocolError();
+            }
+            else if (msg instanceof ChallengeMessage) {
                 onProtocolError();
             }
             else if (msg instanceof AbortMessage) {

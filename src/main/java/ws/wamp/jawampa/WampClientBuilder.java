@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import ws.wamp.jawampa.auth.client.ClientSideAuthentication;
 import ws.wamp.jawampa.internal.UriValidator;
 import ws.wamp.jawampa.transport.WampClientChannelFactory;
 import ws.wamp.jawampa.transport.WampClientChannelFactoryResolver;
@@ -46,6 +47,8 @@ public class WampClientBuilder {
     boolean closeOnErrors = true;
     Set<WampRoles> roles = new HashSet<WampRoles>();
     List<WampSerialization> serializations = new ArrayList<WampSerialization>();
+    String authId = null;
+    List<ClientSideAuthentication> authMethods = new ArrayList<ClientSideAuthentication>();
     
     /** The default reconnect interval in milliseconds.<br>This is set to 5s */
     public static final int DEFAULT_RECONNECT_INTERVAL = 5000;
@@ -113,7 +116,8 @@ public class WampClientBuilder {
         
         return new WampClient(routerUri, realm, rolesArray,
                 useStrictUriValidation, closeOnErrors, 
-                channelFactory, nrReconnects, reconnectInterval);
+                channelFactory, nrReconnects, reconnectInterval,
+                authId, authMethods);
     }
     
     /**
@@ -269,5 +273,26 @@ public class WampClientBuilder {
         this.sslContext = sslContext;
         return this;
     }
+
+   /**
+    * Set the authId to use. If not called, no authId is used.
+    * @param authId the authId
+    * @return The {@link WampClientBuilder} object
+    */
+   public WampClientBuilder withAuthId(String authId) {
+       this.authId = authId;
+       return this;
+   }
+
+   /**
+    * Use a specific auth method. Can be called multiple times to specify multiple
+    * supported auth methods. If this method is not called, anonymous auth is used.
+    * @param authMethod The {@link ClientSideAuthentication} to add
+    * @return The {@link WampClientBuilder} object
+    */
+   public WampClientBuilder withAuthMethod(ClientSideAuthentication authMethod) {
+       this.authMethods.add( authMethod );
+       return this;
+   }
 
 }
