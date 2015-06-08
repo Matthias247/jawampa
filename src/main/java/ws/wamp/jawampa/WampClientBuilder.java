@@ -20,9 +20,8 @@ import io.netty.handler.ssl.SslContext;
 
 import java.net.URI;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.EnumSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import ws.wamp.jawampa.auth.client.ClientSideAuthentication;
@@ -45,7 +44,7 @@ public class WampClientBuilder {
     int reconnectInterval = DEFAULT_RECONNECT_INTERVAL;
     boolean useStrictUriValidation = false;
     boolean closeOnErrors = true;
-    Set<WampRoles> roles = new HashSet<WampRoles>();
+    EnumSet<WampRoles> roles;
     List<WampSerialization> serializations = new ArrayList<WampSerialization>();
     String authId = null;
     List<ClientSideAuthentication> authMethods = new ArrayList<ClientSideAuthentication>();
@@ -60,10 +59,12 @@ public class WampClientBuilder {
      */
     public WampClientBuilder() {
         // Add the default roles
-        roles.add(WampRoles.Caller);
-        roles.add(WampRoles.Callee);
-        roles.add(WampRoles.Publisher);
-        roles.add(WampRoles.Subscriber);
+        roles = EnumSet.of(
+                WampRoles.Caller,
+                WampRoles.Callee,
+                WampRoles.Publisher,
+                WampRoles.Subscriber);
+        
         WampSerialization.addDefaultSerializations(serializations);
     }
     
