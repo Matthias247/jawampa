@@ -130,9 +130,9 @@ public class WampClient {
     public static class ClientConnected implements Status {
         private final long sessionId;
         private final ObjectNode welcomeDetails;
-        private final Set<WampRoles> routerRoles;
+        private final EnumSet<WampRoles> routerRoles;
         
-        public ClientConnected(long sessionId, ObjectNode welcomeDetails, Set<WampRoles> routerRoles) {
+        public ClientConnected(long sessionId, ObjectNode welcomeDetails, EnumSet<WampRoles> routerRoles) {
             this.sessionId = sessionId;
             this.welcomeDetails = welcomeDetails;
             this.routerRoles = routerRoles;
@@ -155,7 +155,7 @@ public class WampClient {
          * Returns the roles that the router implements
          */
         public Set<WampRoles> routerRoles() {
-            return new HashSet<WampRoles>(routerRoles);
+            return EnumSet.copyOf(routerRoles);
         }
         
         @Override
@@ -626,7 +626,7 @@ public class WampClient {
                     return;
                 }
                 
-                Set<WampRoles> routerRoles = new HashSet<WampRoles>();
+                EnumSet<WampRoles> routerRoles = EnumSet.noneOf(WampRoles.class);
                 Iterator<String> roleKeys = roleNode.fieldNames();
                 while (roleKeys.hasNext()) {
                     WampRoles role = WampRoles.fromString(roleKeys.next());
