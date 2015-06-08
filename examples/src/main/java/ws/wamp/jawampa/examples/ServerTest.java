@@ -87,7 +87,7 @@ public class ServerTest {
             public void call(WampClient.Status t1) {
                 System.out.println("Session1 status changed to " + t1);
 
-                if (t1 == WampClient.Status.Connected) {
+                if (t1 instanceof WampClient.ClientConnected) {
                     // Register a procedure
                     addProcSubscription = client1.registerProcedure("com.example.add").subscribe(new Action1<Request>() {
                         @Override
@@ -128,7 +128,7 @@ public class ServerTest {
             public void call(WampClient.Status t1) {
                 System.out.println("Session2 status changed to " + t1);
 
-                if (t1 == WampClient.Status.Connected) {
+                if (t1 instanceof WampClient.ClientConnected) {
                     try {
                         Thread.sleep(100);
                     } catch (InterruptedException e) { }

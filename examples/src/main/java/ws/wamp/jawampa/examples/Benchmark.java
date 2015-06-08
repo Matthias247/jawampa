@@ -86,7 +86,7 @@ public class Benchmark {
             public void call(WampClient.Status t1) {
                 System.out.println("Session status changed to " + t1);
 
-                if (t1 == WampClient.Status.Connected) {
+                if (t1 instanceof WampClient.ClientConnected) {
                     
                     // Provide a procedure
                     procSubscription = client1
@@ -117,7 +117,7 @@ public class Benchmark {
             public void call(WampClient.Status t1) {
                 System.out.println("Session status changed to " + t1);
 
-                if (t1 == WampClient.Status.Connected) {
+                if (t1 instanceof WampClient.ClientConnected) {
                     try {
                         // Wait until the other client could register the procedure
                         Thread.sleep(100);
