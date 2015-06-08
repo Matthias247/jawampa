@@ -28,6 +28,7 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -872,7 +873,7 @@ public class WampClient {
      * publication ID) and will then be completed or will be completed with
      * an error if the event could not be published.
      */
-    public Observable<Long> publish(final String topic, final PublishFlags flags, final ArrayNode arguments,
+    public Observable<Long> publish(final String topic, final EnumSet<PublishFlags> flags, final ArrayNode arguments,
         final ObjectNode argumentsKw)
     {
         final AsyncSubject<Long> resultSubject = AsyncSubject.create();
@@ -896,15 +897,27 @@ public class WampClient {
                 final long requestId = IdGenerator.newLinearId(lastRequestId, requestMap);
                 lastRequestId = requestId;
 
-                ObjectNode options = null;
-                if (flags == PublishFlags.DontExcludeMe) {
-                    options = objectMapper.createObjectNode();
+                ObjectNode options = objectMapper.createObjectNode();
+                if (flags != null && flags.contains(PublishFlags.DontExcludeMe)) {
                     options.put("exclude_me", false);
                 }
+                
+                if (flags != null && flags.contains(PublishFlags.RequireAcknowledge)) {
+                    // An acknowledge from the router in the form of a PUBLISHED or ERROR message
+                    // is expected. The request is stored in the requestMap and the resultSubject will be
+                    // completed once a response was received.
+                    options.put("acknowledge", true);
+                    requestMap.put(requestId, new RequestMapEntry(WampMessages.PublishMessage.ID, resultSubject));
+                } else {
+                    // No acknowledge will be sent from the router.
+                    // Treat the publish as a success
+                    resultSubject.onNext(0L);
+                    resultSubject.onCompleted();
+                }
+
                 final WampMessages.PublishMessage msg =
                     new WampMessages.PublishMessage(requestId, options, topic, arguments, argumentsKw);
                 
-                requestMap.put(requestId, new RequestMapEntry(WampMessages.PublishMessage.ID, resultSubject));
                 channel.writeAndFlush(msg);
             }
         });

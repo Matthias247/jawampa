@@ -17,5 +17,16 @@
 package ws.wamp.jawampa;
 
 public enum PublishFlags {
-    DontExcludeMe;
+    /**
+     * Set the exclude_me flag on the Publish message to false.<br>
+     * This will cause that the published message will also be delivered to the publishing client.
+     */
+    DontExcludeMe,
+    /**
+     * Require an acknowledge from the Wamp router for the publication of the event.<br>
+     * If the flag is not sent every publish request will be reported as successful if a connection
+     * between client and router is established. If the flag is set the response from the router
+     * to a publish message will be used as a result for a publish request.
+     */
+    RequireAcknowledge;
 }
