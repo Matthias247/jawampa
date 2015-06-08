@@ -130,10 +130,12 @@ public class WampClient {
     public static class ClientConnected implements Status {
         private final long sessionId;
         private final ObjectNode welcomeDetails;
+        private final Set<WampRoles> routerRoles;
         
-        public ClientConnected(long sessionId, ObjectNode welcomeDetails) {
+        public ClientConnected(long sessionId, ObjectNode welcomeDetails, Set<WampRoles> routerRoles) {
             this.sessionId = sessionId;
             this.welcomeDetails = welcomeDetails;
+            this.routerRoles = routerRoles;
         }
         
         /** Returns the sessionId that was assigned to the client by the router */
@@ -147,6 +149,13 @@ public class WampClient {
          */
         public ObjectNode welcomeDetails() {
             return welcomeDetails.deepCopy();
+        }
+        
+        /**
+         * Returns the roles that the router implements
+         */
+        public Set<WampRoles> routerRoles() {
+            return new HashSet<WampRoles>(routerRoles);
         }
         
         @Override
@@ -198,7 +207,6 @@ public class WampClient {
     final List<ClientSideAuthentication> authMethods;
     
     final WampRoles[] clientRoles;
-    WampRoles[] routerRoles;
     
     enum PubSubState {
         Subscribing,
@@ -618,22 +626,15 @@ public class WampClient {
                     return;
                 }
                 
-                routerRoles = null;
-                Set<WampRoles> rroles = new HashSet<WampRoles>();
+                Set<WampRoles> routerRoles = new HashSet<WampRoles>();
                 Iterator<String> roleKeys = roleNode.fieldNames();
                 while (roleKeys.hasNext()) {
                     WampRoles role = WampRoles.fromString(roleKeys.next());
-                    if (role != null) rroles.add(role);
-                }
-                routerRoles = new WampRoles[rroles.size()];
-                int i = 0;
-                for (WampRoles r : rroles) {
-                    routerRoles[i] = r; 
-                    i++;
+                    if (role != null) routerRoles.add(role);
                 }
                 
                 remainingNrReconnects = totalNrReconnects;
-                status = new ClientConnected(sessionId, welcomeDetails);
+                status = new ClientConnected(sessionId, welcomeDetails, routerRoles);
                 statusObservable.onNext(status);
             }
             else if (msg instanceof ChallengeMessage) {
