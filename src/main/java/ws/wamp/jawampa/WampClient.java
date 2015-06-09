@@ -509,7 +509,7 @@ public class WampClient {
     }
 
     private void closeCurrentTransport() {
-        if (!(status instanceof ClientDisconnected)) return;
+        if (status instanceof ClientDisconnected) return;
         
         if (channel != null) {
             channel.writeAndFlush(Unpooled.EMPTY_BUFFER)
