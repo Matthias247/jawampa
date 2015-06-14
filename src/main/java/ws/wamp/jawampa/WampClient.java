@@ -103,6 +103,22 @@ public class WampClient {
     
     /** The session is not connected */
     public static class ClientDisconnected implements Status {
+        private final Exception disconnectReason;
+        
+        public ClientDisconnected(Exception closeReason) {
+            this.disconnectReason = closeReason;
+        }
+        
+        /**
+         * Returns an optional reason that describes why the client got
+         * disconnected from the server. This can be null if the client
+         * requested the disconnect or if the client was never connected
+         * to a server.
+         */
+        public Exception disconnectReason() {
+            return disconnectReason;
+        }
+        
         @Override
         public String toString() {
             return "Disconnected";
@@ -164,7 +180,7 @@ public class WampClient {
     }
 
     /** The current status */
-    Status status = new ClientDisconnected();
+    Status status = new ClientDisconnected(null);
     BehaviorSubject<Status> statusObservable = BehaviorSubject.create(status);
     
     final EventLoopGroup eventLoop;
@@ -396,7 +412,7 @@ public class WampClient {
             if (handler != this) return;
             // System.out.println("Session handler inactive");
             
-            closeCurrentTransport();
+            closeCurrentTransport(new ApplicationError(ApplicationError.TRANSPORT_CLOSED));
             // Can emit the status, because we always go from connected to closed here
             statusObservable.onNext(status);
             // Try reconnect if possible
@@ -488,7 +504,7 @@ public class WampClient {
                     } else if (!f.isCancelled()) {
                         // Remark: Might be called directly in addListener
                         // Therefore addListener should be the last call in beginConnect
-                        closeCurrentTransport();
+                        closeCurrentTransport(new ApplicationError(ApplicationError.TRANSPORT_CAN_NOT_CONNECT));
                         // Try reconnect if possible, otherwise announce close
                         if (mayReconnect()) {
                             scheduleReconnect();
@@ -502,13 +518,13 @@ public class WampClient {
             // Catch exceptions that can happen during creating the channel
             // These are normally signs that something is wrong with our configuration
             // Therefore we don't trigger retries
-            closeCurrentTransport();
+            closeCurrentTransport(e);
             statusObservable.onNext(status);
             completeStatus(e);
         }
     }
 
-    private void closeCurrentTransport() {
+    private void closeCurrentTransport(Exception e) {
         if (status instanceof ClientDisconnected) return;
         
         if (channel != null) {
@@ -529,7 +545,7 @@ public class WampClient {
             reconnectSubscription = null;
         }
 
-        status = new ClientDisconnected();
+        status = new ClientDisconnected(e);
         
         clearPendingRequests(new ApplicationError(ApplicationError.TRANSPORT_CLOSED));
         clearAllSubscriptions(null);
@@ -567,7 +583,7 @@ public class WampClient {
                     if (!(status instanceof ClientDisconnected)) {
                         // Close the connection (or connection attempt)
                         remainingNrReconnects = 0; // Don't reconnect
-                        closeCurrentTransport();
+                        closeCurrentTransport(new ApplicationError(ApplicationError.CLIENT_CLOSED));
                         statusObservable.onNext(status);
                     }
                     
@@ -595,7 +611,7 @@ public class WampClient {
     
     private void onSessionError(ApplicationError error) {
         // We move from connected to disconnected
-        closeCurrentTransport();
+        closeCurrentTransport(error);
         statusObservable.onNext(status);
         
         if (closeClientOnErrors) {

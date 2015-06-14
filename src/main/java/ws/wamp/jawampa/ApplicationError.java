@@ -207,7 +207,11 @@ public class ApplicationError extends WampError {
     
     public final static String NOT_CONNECTED = "jawampa.error.not_connected";
     
+    /** The transport between client and server got closed */
     public final static String TRANSPORT_CLOSED = "jawampa.error.transport_closed";
+    
+    /** The client can not connect to the server */
+    public final static String TRANSPORT_CAN_NOT_CONNECT = "jawampa.error.transport_can_not_connect";
     
     public final static String MISSING_RESULT = "jawampa.error.missing_result";
     
@@ -219,5 +223,6 @@ public class ApplicationError extends WampError {
     
     public final static String SESSION_ABORTED = "jawampa.error.session_aborted";
     
-    
+    /** The user requested the client to close */
+    public final static String CLIENT_CLOSED = "jawampa.error.client_closed";
 }
