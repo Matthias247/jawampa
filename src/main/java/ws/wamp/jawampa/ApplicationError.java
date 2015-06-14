@@ -16,6 +16,8 @@
 
 package ws.wamp.jawampa;
 
+import ws.wamp.jawampa.connection.IWampConnectorProvider;
+
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
@@ -225,4 +227,18 @@ public class ApplicationError extends WampError {
     
     /** The user requested the client to close */
     public final static String CLIENT_CLOSED = "jawampa.error.client_closed";
+    
+    /** An invalid connector provider (e.g. null) was is used */
+    public final static String INVALID_CONNECTOR_PROVIDER = "jawampa.error.invalid_connector_provider";
+    
+    /**
+     * The connection configuration is invalid.<br>
+     * This might happen if the type of the connection configuration does not match to
+     * the type which the {@link IWampConnectorProvider} expects or if the value
+     * is null and the provider expects a non-null value.
+     */
+    public final static String INVALID_CONNECTION_CONFIGURATION = "jawampa.error.invalid_connection_configuration";
+    
+    /** A scheduler that is not compatible to a particular connection provider was assigned to it */
+    public final static String INCOMATIBLE_SCHEDULER = "jawampa.error.incompatible_scheduler";
 }

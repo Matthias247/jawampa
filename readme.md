@@ -32,12 +32,12 @@ Add the following repository to your pom.xml:
       </snapshots>
     </repository>
 
-and declare the following dependency:
+and declare the following dependency for the base library:
 
     <dependency>
         <groupId>ws.wamp.jawampa</groupId>
         <artifactId>jawampa</artifactId>
-        <version>0.3.0</version>
+        <version>0.4.0</version>
     </dependency>
 
 

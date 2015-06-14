@@ -14,14 +14,29 @@
  * under the License.
  */
 
-package ws.wamp.jawampa.transport;
+package ws.wamp.jawampa.client;
+
+import ws.wamp.jawampa.WampClient;
 
 /**
- * Events that are fired that are related to WAMP
+ * Base class for all internal states that the client can have
  */
-public enum WampChannelEvents {
+public interface ClientState {
     /**
-     * The websocket connection to a remote peer was established
+     * Is called when a new state is entered.
+     * @param lastState The last state that was entered before this state.
      */
-    WEBSOCKET_CONN_ESTABLISHED
+    void onEnter(ClientState lastState);
+    
+    /**
+     * Is called when the a state is leaved.
+     * @param newState The new state that will be entered
+     */
+    void onLeave(ClientState newState);
+    
+    /**
+     * Initiates the close process.<br>
+     * Will be called on {@link WampClient#close()} of the client
+     */
+    void initClose();
 }

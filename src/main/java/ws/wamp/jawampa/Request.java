@@ -16,13 +16,14 @@
 
 package ws.wamp.jawampa;
 
-import io.netty.channel.Channel;
-
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 
-import rx.functions.Action0;
 import ws.wamp.jawampa.WampMessages.ErrorMessage;
 import ws.wamp.jawampa.WampMessages.YieldMessage;
+import ws.wamp.jawampa.client.SessionEstablishedState;
+import ws.wamp.jawampa.client.StateController;
+import ws.wamp.jawampa.connection.IWampConnectionPromise;
+import ws.wamp.jawampa.internal.ArgArrayBuilder;
 import ws.wamp.jawampa.internal.UriValidator;
 
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -37,8 +38,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  */
 public class Request {
     
-    final WampClient client;
-    final Channel channel;
+    final StateController stateController;
+    final SessionEstablishedState session;
     final long requestId;
     final ArrayNode arguments;
     final ObjectNode keywordArguments;
@@ -63,11 +64,11 @@ public class Request {
     	return details;
     }
 
-    public Request(WampClient client, Channel channel, 
+    public Request(StateController stateController, SessionEstablishedState session, 
                    long requestId, ArrayNode arguments, ObjectNode keywordArguments, ObjectNode details)
     {
-        this.client = client;
-        this.channel = channel;
+        this.stateController = stateController;
+        this.session = session;
         this.requestId = requestId;
         this.arguments = arguments;
         this.keywordArguments = keywordArguments;
@@ -99,7 +100,7 @@ public class Request {
      * @param args The positional arguments to sent in the response
      */
     public void replyError(String errorUri, Object... args) throws ApplicationError{
-        replyError(errorUri, client.buildArgumentsArray(args), null);
+        replyError(errorUri, ArgArrayBuilder.buildArgumentsArray(stateController.clientConfig().objectMapper(), args), null);
     }
     
     /**
@@ -121,11 +122,11 @@ public class Request {
                                                   requestId, null, errorUri,
                                                   arguments, keywordArguments);
          
-        client.scheduler.createWorker().schedule(new Action0() {
+        stateController.tryScheduleAction(new Runnable() {
             @Override
-            public void call() {
-                if (client.channel != channel) return;
-                channel.writeAndFlush(msg);
+            public void run() {
+                if (stateController.currentState() != session) return;
+                session.connectionController().sendMessage(msg, IWampConnectionPromise.Empty);
             }
         });
     }
@@ -133,7 +134,7 @@ public class Request {
     /**
      * Send a normal response to the request.<br>
      * If this is called more than once then the following invocations will
-     * have no effect. Respones will be only sent once.
+     * have no effect. Responses will be only sent once.
      * @param arguments The positional arguments to sent in the response
      * @param keywordArguments The keyword arguments to sent in the response
      */
@@ -144,11 +145,11 @@ public class Request {
         final YieldMessage msg = new YieldMessage(requestId, null,
                                                   arguments, keywordArguments);
          
-        client.scheduler.createWorker().schedule(new Action0() {
+        stateController.tryScheduleAction(new Runnable() {
             @Override
-            public void call() {
-                if (client.channel != channel) return;
-                channel.writeAndFlush(msg);
+            public void run() {
+                if (stateController.currentState() != session) return;
+                session.connectionController().sendMessage(msg, IWampConnectionPromise.Empty);
             }
         });
     }
@@ -165,7 +166,8 @@ public class Request {
      * @param keywordArguments The keyword arguments to sent in the response
      */
     public void reply(Object... args) {
-        reply(client.buildArgumentsArray(args), null);
+        reply(ArgArrayBuilder.buildArgumentsArray(
+            stateController.clientConfig().objectMapper(),args), null);
     }
 
 }

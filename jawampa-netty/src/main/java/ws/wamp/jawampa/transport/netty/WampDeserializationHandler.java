@@ -14,7 +14,7 @@
  * under the License.
  */
 
-package ws.wamp.jawampa.transport;
+package ws.wamp.jawampa.transport.netty;
 
 import java.util.List;
 

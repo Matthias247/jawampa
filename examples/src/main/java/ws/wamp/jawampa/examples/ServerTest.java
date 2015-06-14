@@ -27,12 +27,13 @@ import rx.functions.Action1;
 import rx.schedulers.Schedulers;
 import ws.wamp.jawampa.ApplicationError;
 import ws.wamp.jawampa.Request;
-import ws.wamp.jawampa.WampError;
 import ws.wamp.jawampa.WampRouter;
 import ws.wamp.jawampa.WampRouterBuilder;
 import ws.wamp.jawampa.WampClient;
 import ws.wamp.jawampa.WampClientBuilder;
-import ws.wamp.jawampa.transport.SimpleWampWebsocketListener;
+import ws.wamp.jawampa.connection.IWampConnectorProvider;
+import ws.wamp.jawampa.transport.netty.NettyWampClientConnectorProvider;
+import ws.wamp.jawampa.transport.netty.SimpleWampWebsocketListener;
 
 public class ServerTest {
     
@@ -62,6 +63,7 @@ public class ServerTest {
         URI serverUri = URI.create("ws://0.0.0.0:8080/ws1");
         SimpleWampWebsocketListener server;
 
+        IWampConnectorProvider connectorProvider = new NettyWampClientConnectorProvider();
         WampClientBuilder builder = new WampClientBuilder();
 
         // Build two clients
@@ -71,13 +73,14 @@ public class ServerTest {
             server = new SimpleWampWebsocketListener(router, serverUri, null);
             server.start();
             
-            builder.withUri("ws://localhost:8080/ws1")
+            builder.withConnectorProvider(connectorProvider)
+                   .withUri("ws://localhost:8080/ws1")
                    .withRealm("realm1")
                    .withInfiniteReconnects()
                    .withReconnectInterval(3, TimeUnit.SECONDS);
             client1 = builder.build();
             client2 = builder.build();
-        } catch (WampError e) {
+        } catch (Exception e) {
             e.printStackTrace();
             return;
         }
@@ -217,16 +220,16 @@ public class ServerTest {
         
         waitUntilKeypressed();
         System.out.println("Closing router");
-        router.close();
+        router.close().toBlocking().last();;
         server.stop();
         
         waitUntilKeypressed();
         System.out.println("Closing the client 1");
-        client1.close();
+        client1.close().toBlocking().last();
         
         waitUntilKeypressed();
         System.out.println("Closing the client 2");
-        client2.close();
+        client2.close().toBlocking().last();
     }
     
     private void waitUntilKeypressed() {

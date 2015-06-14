@@ -14,7 +14,7 @@
  * under the License.
  */
 
-package ws.wamp.jawampa.transport;
+package ws.wamp.jawampa.transport.netty;
 
 import ws.wamp.jawampa.WampError;
 
@@ -80,7 +80,7 @@ public class WampClientWebsocketHandler extends ChannelInboundHandlerAdapter {
                          new WampSerializationHandler(serialization));
             
             // Fire the connection established event
-            ctx.fireUserEventTriggered(WampChannelEvents.WEBSOCKET_CONN_ESTABLISHED);
+            ctx.fireUserEventTriggered(new ConnectionEstablishedEvent(serialization));
             
         } else {
             ctx.fireUserEventTriggered(evt);

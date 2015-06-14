@@ -16,9 +16,8 @@
 
 package ws.wamp.jawampa.internal;
 
-import io.netty.util.internal.ThreadLocalRandom;
-
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Contains method for generating WAMP IDs

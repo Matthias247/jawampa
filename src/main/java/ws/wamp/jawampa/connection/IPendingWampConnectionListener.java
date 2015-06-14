@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Matthias Einwag
+ * Copyright 2015 Matthias Einwag
  *
  * The jawampa authors license this file to you under the Apache License,
  * version 2.0 (the "License"); you may not use this file except in compliance
@@ -14,10 +14,19 @@
  * under the License.
  */
 
-package ws.wamp.jawampa.transport;
+package ws.wamp.jawampa.connection;
 
-public class WampHandlerConfiguration {
+/**
+ * A listener interface for a connection that is currently established.<br>
+ * Once the connection is established one of the callback methods that this
+ * listener provides will be called.
+ */
+public interface IPendingWampConnectionListener {
+    /** The connection succeeded */
+    void connectSucceeded(IWampConnection connection);
     
-    /** The maximum allowed websocket frame size for WAMP messages */
-    final static int MAX_WEBSOCKET_FRAME_SIZE = 16*1024*1024; // 16MB
+    /**
+     * The connection of the transport failed or the connection was cancelled.
+     */
+    void connectFailed(Throwable cause);
 }

@@ -14,7 +14,7 @@
  * under the License.
  */
 
-package ws.wamp.jawampa.transport;
+package ws.wamp.jawampa.transport.netty;
 
 import ws.wamp.jawampa.WampRouter;
 import io.netty.buffer.Unpooled;
@@ -23,6 +23,7 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
@@ -39,6 +40,11 @@ import io.netty.handler.ssl.SslHandler;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.internal.StringUtil;
 import ws.wamp.jawampa.WampSerialization;
+import ws.wamp.jawampa.WampMessages.WampMessage;
+import ws.wamp.jawampa.connection.IWampConnection;
+import ws.wamp.jawampa.connection.IWampConnectionAcceptor;
+import ws.wamp.jawampa.connection.IWampConnectionListener;
+import ws.wamp.jawampa.connection.IWampConnectionPromise;
 
 import java.util.List;
 
@@ -52,6 +58,7 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
     
     final String websocketPath;
     final WampRouter router;
+    final IWampConnectionAcceptor connectionAcceptor;
     final List<WampSerialization> supportedSerializations;
     
     WampSerialization serialization = WampSerialization.Invalid;
@@ -65,6 +72,7 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
                                       List<WampSerialization> supportedSerializations) {
         this.websocketPath = websocketPath;
         this.router = router;
+        this.connectionAcceptor = router.connectionAcceptor();
         this.supportedSerializations = supportedSerializations;
     }
     
@@ -120,6 +128,64 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
         return request.getUri().equals(websocketPath);
     }
     
+    // All methods inside the connection will be called from the WampRouters thread
+    // This causes no problems on the ordering since they all will be called from
+    // the same thread. And Netty is threadsafe
+    static class WampServerConnection implements IWampConnection {
+        
+        final WampSerialization serialization; 
+        ChannelHandlerContext ctx;
+        
+        public WampServerConnection(WampSerialization serialization) {
+            this.serialization = serialization;
+        }
+        
+        @Override
+        public WampSerialization serialization() {
+            return serialization;
+        }
+        
+        @Override
+        public boolean isSingleWriteOnly() {
+            return false;
+        }
+        
+        @Override
+        public void sendMessage(WampMessage message, final IWampConnectionPromise<Void> promise) {
+            ChannelFuture f = ctx.writeAndFlush(message);
+            f.addListener(new ChannelFutureListener() {
+                @Override
+                public void operationComplete(ChannelFuture future) throws Exception {
+                    if (future.isSuccess() || future.isCancelled())
+                        promise.fulfill(null);
+                    else
+                        promise.reject(future.cause());
+                }
+            });
+        }
+        
+        @Override
+        public void close(boolean sendRemaining, final IWampConnectionPromise<Void> promise) {
+            ctx.writeAndFlush(Unpooled.EMPTY_BUFFER)
+            .addListener(new ChannelFutureListener() {
+                @Override
+                public void operationComplete(ChannelFuture future) throws Exception {
+                    future.channel()
+                        .close()
+                        .addListener(new ChannelFutureListener() {
+                        @Override
+                        public void operationComplete(ChannelFuture future) throws Exception {
+                            if (future.isSuccess() || future.isCancelled())
+                                promise.fulfill(null);
+                            else
+                                promise.reject(future.cause());
+                        }
+                    });
+                }
+            });
+        }
+    }
+    
     private void tryWebsocketHandshake(final ChannelHandlerContext ctx, FullHttpRequest request) {
         String wsLocation = getWebSocketLocation(ctx, request);
         String subProtocols = WampSerialization.makeWebsocketSubprotocolList(supportedSerializations);
@@ -134,6 +200,8 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
             WebSocketServerHandshakerFactory.sendUnsupportedVersionResponse(ctx.channel());
         } else {
             handshakeInProgress = true;
+            // The next statement will throw if the handshake gets wrong. This will lead to an
+            // exception in the channel which will close the channel (which is OK).
             final ChannelFuture handshakeFuture = handshaker.handshake(ctx.channel(), request);
             String actualProtocol = handshaker.selectedSubprotocol();
             serialization = WampSerialization.fromString(actualProtocol);
@@ -172,21 +240,61 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
             protocolHandlerCtx.pipeline().addLast("wamp-deserializer", 
                 new WampDeserializationHandler(serialization));
             
+            // Retrieve a listener for this new connection
+            final IWampConnectionListener connectionListener = connectionAcceptor.createNewConnectionListener();
+            
+            // Create a Wamp connection interface on top of that
+            final WampServerConnection connection = new WampServerConnection(serialization);
+            
+            ChannelHandler routerHandler = new SimpleChannelInboundHandler<WampMessage> () {
+                @Override
+                public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+                    // Gets called once the channel gets added to the pipeline
+                    connection.ctx = ctx;
+                }
+                 
+                @Override
+                public void channelActive(ChannelHandlerContext ctx) throws Exception {
+                    connectionAcceptor.acceptNewConnection(connection, connectionListener);
+                }
+                 
+                @Override
+                public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+                    connectionListener.transportClosed();
+                }
+            
+                @Override
+                protected void channelRead0(ChannelHandlerContext ctx, WampMessage msg) throws Exception {
+                    connectionListener.messageReceived(msg);
+                }
+                 
+                @Override
+                public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+                    ctx.close();
+                    connectionListener.transportError(cause);
+                }
+            };
+            
             // Install the router in the pipeline
-            protocolHandlerCtx.pipeline().addLast(router.eventLoop(), "wamp-router", router.createRouterHandler());
+            protocolHandlerCtx.pipeline().addLast("wamp-router", routerHandler);
             
             handshakeFuture.addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
                     if (!future.isSuccess()) {
-                        ctx.fireExceptionCaught(future.cause());
+                        // The handshake was not successful. 
+                        // Close the channel without registering
+                        ctx.fireExceptionCaught(future.cause()); // TODO: This is a race condition if the router did not yet accept the connection
                     } else {
                         // We successfully sent out the handshake
-                        // Notify the activation to everything new
+                        // Notify the router of that fact
                         ctx.fireChannelActive();
                     }
                 }
             });
+            
+            // TODO: Maybe there are frames incoming before the handshakeFuture is resolved
+            // This might lead to frames getting sent to the router before it is activated
         }
     }
     

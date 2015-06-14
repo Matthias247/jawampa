@@ -2,13 +2,13 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>ws.wamp.jawampa</groupId>
-  <artifactId>jawampa-examples</artifactId>
+  <artifactId>jawampa-netty</artifactId>
   <version>0.4.0</version>
 
-  <name>jawampa-examples</name>
+  <name>jawampa-netty</name>
   <url></url>
   <description>
-    Examples for the usage of jawampa
+    Netty adapter for jawampa
   </description>
 
   <licenses>
@@ -18,7 +18,7 @@
     </license>
   </licenses>
 
-  <inceptionYear>2014</inceptionYear>
+  <inceptionYear>2015</inceptionYear>
 
   <build>
     <sourceDirectory>src/main/java</sourceDirectory>
@@ -37,8 +37,13 @@
   <dependencies>
     <dependency>
       <groupId>ws.wamp.jawampa</groupId>
-      <artifactId>jawampa-netty</artifactId>
+      <artifactId>jawampa</artifactId>
       <version>0.4.0</version>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-codec-http</artifactId>
+      <version>4.0.24.Final</version>
     </dependency>
   </dependencies>
 </project>

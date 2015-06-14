@@ -16,16 +16,6 @@
 
 package ws.wamp.jawampa;
 
-import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.channel.group.ChannelGroup;
-import io.netty.channel.group.DefaultChannelGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
-
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -34,11 +24,26 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 
+import rx.Observable;
 import rx.Scheduler;
 import rx.schedulers.Schedulers;
+import rx.subjects.AsyncSubject;
 import ws.wamp.jawampa.WampMessages.*;
+import ws.wamp.jawampa.connection.ICompletionCallback;
+import ws.wamp.jawampa.connection.IConnectionController;
+import ws.wamp.jawampa.connection.IWampConnection;
+import ws.wamp.jawampa.connection.IWampConnectionAcceptor;
+import ws.wamp.jawampa.connection.IWampConnectionFuture;
+import ws.wamp.jawampa.connection.IWampConnectionListener;
+import ws.wamp.jawampa.connection.IWampConnectionPromise;
+import ws.wamp.jawampa.connection.QueueingConnectionController;
+import ws.wamp.jawampa.connection.WampConnectionPromise;
 import ws.wamp.jawampa.internal.IdGenerator;
 import ws.wamp.jawampa.internal.IdValidator;
 import ws.wamp.jawampa.internal.RealmConfig;
@@ -67,7 +72,7 @@ public class WampRouter {
     /** Represents a realm that is exposed through the router */
     static class Realm {
         final RealmConfig config;
-        final List<WampRouterHandler> channels = new ArrayList<WampRouterHandler>();
+        final List<ClientHandler> channels = new ArrayList<ClientHandler>();
         final Map<String, Procedure> procedures = new HashMap<String, Procedure>();
         
         // Fields that are used for implementing subscription functionality
@@ -83,14 +88,14 @@ public class WampRouter {
             subscriptionsByFlags.put(SubscriptionFlags.Wildcard, new HashMap<String, Subscription>());
         }
         
-        void includeChannel(WampRouterHandler channel, long sessionId, Set<WampRoles> roles) {
+        void includeChannel(ClientHandler channel, long sessionId, Set<WampRoles> roles) {
             channels.add(channel);
             channel.realm = this;
             channel.sessionId = sessionId;
             channel.roles = roles;
         }
         
-        void removeChannel(WampRouterHandler channel, boolean removeFromList) {
+        void removeChannel(ClientHandler channel, boolean removeFromList) {
             if (channel.realm == null) return;
             
             if (channel.subscriptionsById != null) {
@@ -116,7 +121,7 @@ public class WampRouter {
                         if (invoc.caller.state != RouterHandlerState.Open) continue;
                         ErrorMessage errMsg = new ErrorMessage(CallMessage.ID, invoc.callRequestId, 
                             null, ApplicationError.NO_SUCH_PROCEDURE, null, null);
-                        invoc.caller.ctx.writeAndFlush(errMsg);
+                        invoc.caller.controller.sendMessage(errMsg, IWampConnectionPromise.Empty);
                     }
                     proc.pendingCalls.clear();
                     // Remove the procedure from the realm
@@ -139,11 +144,11 @@ public class WampRouter {
     
     static class Procedure {
         final String procName;
-        final WampRouterHandler provider;
+        final ClientHandler provider;
         final long registrationId;
         final List<Invocation> pendingCalls = new ArrayList<WampRouter.Invocation>();
         
-        public Procedure(String name, WampRouterHandler provider, long registrationId) {
+        public Procedure(String name, ClientHandler provider, long registrationId) {
             this.procName = name;
             this.provider = provider;
             this.registrationId = registrationId;
@@ -153,7 +158,7 @@ public class WampRouter {
     static class Invocation {
         Procedure procedure;
         long callRequestId;
-        WampRouterHandler caller;
+        ClientHandler caller;
         long invocationRequestId;
     }
     
@@ -162,33 +167,37 @@ public class WampRouter {
         final SubscriptionFlags flags;
         final String components[]; // non-null only for wildcard type
         final long subscriptionId;
-        final Set<WampRouterHandler> subscribers;
+        final Set<ClientHandler> subscribers;
         
         public Subscription(String topic, SubscriptionFlags flags, long subscriptionId) {
             this.topic = topic;
             this.flags = flags;
             this.components = flags == SubscriptionFlags.Wildcard ? topic.split("\\.", -1) : null;
             this.subscriptionId = subscriptionId;
-            this.subscribers = new HashSet<WampRouterHandler>();
+            this.subscribers = new HashSet<ClientHandler>();
         }
     }
     
-    final EventLoopGroup eventLoop;
+    final ScheduledExecutorService eventLoop;
     final Scheduler scheduler;
     
     final ObjectMapper objectMapper = new ObjectMapper();
     
     boolean isDisposed = false;
+    AsyncSubject<Void> closedFuture = AsyncSubject.create();
     
     final Map<String, Realm> realms;
-    final ChannelGroup idleChannels;
+    final Set<IConnectionController> idleChannels;
+    
+    /** The number of connections that have to be closed. This is important for shutdown */
+    int connectionsToClose = 0;
     
     /**
      * Returns the (singlethreaded) EventLoop on which this router is running.<br>
      * This is required by other Netty ChannelHandlers that want to forward messages
      * to the router.
      */
-    public EventLoopGroup eventLoop() {
+    public ScheduledExecutorService eventLoop() {
         return eventLoop;
     }
     
@@ -210,7 +219,7 @@ public class WampRouter {
         }
         
         // Create an eventloop and the RX scheduler on top of it
-        this.eventLoop = new NioEventLoopGroup(1, new ThreadFactory() {
+        this.eventLoop = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
             @Override
             public Thread newThread(Runnable r) {
                 Thread t = new Thread(r, "WampRouterEventLoop");
@@ -220,7 +229,49 @@ public class WampRouter {
         });
         this.scheduler = Schedulers.from(eventLoop);
 
-        idleChannels = new DefaultChannelGroup(eventLoop.next());
+        idleChannels = new HashSet<IConnectionController>();
+    }
+    
+    /**
+     * Tries to schedule a runnable on the underlying executor.<br>
+     * Rejected executions will be suppressed.<br>
+     * This is useful for cases when the clients EventLoop is shut down before
+     * the EventLoop of the underlying connection.
+     * 
+     * @param action The action to schedule.
+     */
+    void tryScheduleAction(Runnable action) {
+        try {
+            eventLoop.submit(action);
+        } catch (RejectedExecutionException e) {}
+    }
+    
+    private ICompletionCallback<Void> onConnectionClosed = new ICompletionCallback<Void>() {
+        @Override
+        public void onCompletion(IWampConnectionFuture<Void> future) {
+            tryScheduleAction(new Runnable() {
+                @Override
+                public void run() {
+                    connectionsToClose -= 1;
+                    if (isDisposed && connectionsToClose == 0) {
+                        eventLoop.shutdown();
+                        closedFuture.onNext(null);
+                        closedFuture.onCompleted();
+                    }
+                }
+            });
+        }
+    };
+    
+    /**
+     * Increases the number of connections to close and starts to asynchronously
+     * close it. When this has happened {@link WampRouter#onConnectionClosed} will be called.
+     */
+    private void closeConnection(IConnectionController controller, boolean sendRemaining) {
+        connectionsToClose += 1;
+        WampConnectionPromise<Void> promise =
+            new WampConnectionPromise<Void>(onConnectionClosed, null);
+        controller.close(sendRemaining, promise);
     }
     
     /**
@@ -229,37 +280,38 @@ public class WampRouter {
      * All connections to clients on the realm will be closed.<br>
      * However pending calls will be completed through an error message
      * as far as possible.
+     * @return Returns an observable that completes when the router is completely shut down.
      */
-    public void close() {
-        if (eventLoop.isShuttingDown() || eventLoop.isShutdown()) return;
+    public Observable<Void> close() {
+        if (eventLoop.isShutdown()) return closedFuture;
         
-        eventLoop.execute(new Runnable() {
+        tryScheduleAction(new Runnable() {
             @Override
             public void run() {
                 if (isDisposed) return;
                 isDisposed = true;
                 
                 // Close all currently connected channels
-                idleChannels.close();
+                for (IConnectionController con : idleChannels) closeConnection(con, true);
                 idleChannels.clear();
                 
                 for (Realm ri : realms.values()) {
-                    for (WampRouterHandler channel : ri.channels) {
+                    for (ClientHandler channel : ri.channels) {
                         ri.removeChannel(channel, false);
                         channel.markAsClosed();
                         GoodbyeMessage goodbye = new GoodbyeMessage(null, ApplicationError.SYSTEM_SHUTDOWN);
-                        channel.ctx.writeAndFlush(goodbye).addListener(ChannelFutureListener.CLOSE);
+                        channel.controller.sendMessage(goodbye, IWampConnectionPromise.Empty);
+                        closeConnection(channel.controller, true);
                     }
                     ri.channels.clear();
                 }
                 
-                eventLoop.shutdownGracefully();
+                // close is asynchronous. It will wait until all connections are closed
+                // Afterwards the eventLoop will be shutDown.
             }
         });
-    }
-    
-    public ChannelHandler createRouterHandler() {
-        return new WampRouterHandler();
+        
+        return closedFuture;
     }
     
     enum RouterHandlerState {
@@ -267,10 +319,72 @@ public class WampRouter {
         Closed
     }
     
-    class WampRouterHandler extends SimpleChannelInboundHandler<WampMessage> {
+    IWampConnectionAcceptor connectionAcceptor = new IWampConnectionAcceptor() {
+        @Override
+        public IWampConnectionListener createNewConnectionListener() {
+            ClientHandler newHandler = new ClientHandler();
+            IConnectionController newController = new QueueingConnectionController(eventLoop, newHandler);
+            newHandler.controller = newController;
+            return newController;
+        }
+
+        @Override
+        public void acceptNewConnection(final IWampConnection newConnection,
+                final IWampConnectionListener connectionListener) {
+            try {
+                eventLoop.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (connectionListener == null
+                                || !(connectionListener instanceof QueueingConnectionController)
+                                || newConnection == null) {
+                            // This is always true if the transport provider does not manipulate the structure
+                            // that was sent by the router
+                            if (newConnection != null) newConnection.close(false, IWampConnectionPromise.Empty);
+                            return;
+                        }
+                        QueueingConnectionController controller = (QueueingConnectionController)connectionListener;
+                        controller.setConnection(newConnection);
+                        
+                        if (isDisposed) {
+                            // Got an incoming connection after the router has already shut down.
+                            // Therefore we close the connection
+                            closeConnection(controller, false);
+                        } else {
+                            // Store the controller
+                            idleChannels.add(controller);
+                        }
+                    }
+                });
+            } catch (RejectedExecutionException e) {
+                // Close the connection
+                // Defer the operation to avoid a cyclic call from the new connection
+                // to this method and back
+                Runnable r = new Runnable () {
+                    @Override
+                    public void run() {
+                        newConnection.close(false, IWampConnectionPromise.Empty);
+                    }
+                };
+                ExecutorService executor = Executors.newSingleThreadExecutor();
+                executor.submit(r);
+                executor.shutdown();
+            }
+        }
+    };
+    
+    /**
+     * Returns the {@link IWampConnectionAcceptor} interface that the router
+     * provides in order to be able to accept new connection.
+     */
+    public IWampConnectionAcceptor connectionAcceptor() {
+        return connectionAcceptor;
+    }
+    
+    class ClientHandler implements IWampConnectionListener {
         
+        IConnectionController controller;
         public RouterHandlerState state = RouterHandlerState.Open;
-        ChannelHandlerContext ctx;
         long sessionId;
         Realm realm;
         Set<WampRoles> roles;
@@ -292,79 +406,54 @@ public class WampRouter {
             state = RouterHandlerState.Closed;
         }
         
-        @Override
-        public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-            // System.out.println("Router handler added on thread " + Thread.currentThread().getId());
-            this.ctx = ctx;
+        public ClientHandler() {
         }
-        
+
         @Override
-        public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            // System.out.println("Router handler active on thread " + Thread.currentThread().getId());
-            if (state != RouterHandlerState.Open) return;
-            
-            if (isDisposed) {
-                // Got an incoming connection after the router has already shut down.
-                // Therefore we close the connection
-                state = RouterHandlerState.Closed;
-                ctx.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE);
-            } else {
-                idleChannels.add(ctx.channel());
-            }
+        public void transportClosed() {
+            // Handle in the same way as a close due to an error
+            transportError(null);
         }
-        
+
         @Override
-        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-            // System.out.println("Router handler inactive on thread " + Thread.currentThread().getId());
+        public void transportError(Throwable cause) {
             if (isDisposed || state != RouterHandlerState.Open) return;
-            markAsClosed();
             if (realm != null) {
-                realm.removeChannel(this, true);
+                closeActiveClient(ClientHandler.this, null);
             } else {
-                idleChannels.remove(ctx.channel());
+                closePassiveClient(ClientHandler.this);
             }
         }
 
         @Override
-        protected void channelRead0(ChannelHandlerContext ctx, WampMessage msg) throws Exception {
-            //System.out.println("Router channel read on thread " + Thread.currentThread().getId());
+        public void messageReceived(final WampMessage message) {
             if (isDisposed || state != RouterHandlerState.Open) return;
             if (realm == null) {
-                onMessageFromUnregisteredChannel(this, msg);
+                onMessageFromUnregisteredChannel(ClientHandler.this, message);
             } else {
-                onMessageFromRegisteredChannel(this, msg);
-            }
-        }
-        
-        @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            if (isDisposed || state != RouterHandlerState.Open) return;
-            if (realm != null) {
-                closeActiveChannel(this, null);  
-            } else {
-                closePassiveChannel(this);
+                onMessageFromRegisteredChannel(ClientHandler.this, message);
             }
         }
     }
     
-    private void onMessageFromRegisteredChannel(WampRouterHandler handler, WampMessage msg) {
+    private void onMessageFromRegisteredChannel(ClientHandler handler, WampMessage msg) {
         
         // TODO: Validate roles for all relevant messages
         
         if (msg instanceof HelloMessage || msg instanceof WelcomeMessage) {
             // The client sent hello but it was already registered -> This is an error
             // If the client sends welcome it's also an error
-            closeActiveChannel(handler, new GoodbyeMessage(null, ApplicationError.INVALID_ARGUMENT));
+            closeActiveClient(handler, new GoodbyeMessage(null, ApplicationError.INVALID_ARGUMENT));
         } else if (msg instanceof AbortMessage || msg instanceof GoodbyeMessage) {
             // The client wants to leave the realm
             // Remove the channel from the realm
             handler.realm.removeChannel(handler, true);
             // But add it to the list of passive channels
-            idleChannels.add(handler.ctx.channel());
+            idleChannels.add(handler.controller);
             // Echo the message in case of goodbye
             if (msg instanceof GoodbyeMessage) {
                 GoodbyeMessage reply = new GoodbyeMessage(null, ApplicationError.GOODBYE_AND_OUT);
-                handler.ctx.writeAndFlush(reply);
+                handler.controller.sendMessage(reply, IWampConnectionPromise.Empty);
             }
         } else if (msg instanceof CallMessage) {
             // The client wants to call a remote function
@@ -390,7 +479,7 @@ public class WampRouter {
             if (err != null) { // If we have an error send that to the client
                 ErrorMessage errMsg = new ErrorMessage(CallMessage.ID, call.requestId, 
                     null, err, null, null);
-                handler.ctx.writeAndFlush(errMsg);
+                handler.controller.sendMessage(errMsg, IWampConnectionPromise.Empty);
                 return;
             }
             
@@ -411,7 +500,7 @@ public class WampRouter {
             // And send it to the provider
             InvocationMessage imsg = new InvocationMessage(invoc.invocationRequestId,
                 proc.registrationId, null, call.arguments, call.argumentsKw);
-            proc.provider.ctx.writeAndFlush(imsg);
+            proc.provider.controller.sendMessage(imsg, IWampConnectionPromise.Empty);
         } else if (msg instanceof YieldMessage) {
             // The clients sends as the result of an RPC
             // Verify the message
@@ -425,7 +514,7 @@ public class WampRouter {
             invoc.procedure.pendingCalls.remove(invoc);
             // Send the result to the original caller
             ResultMessage result = new ResultMessage(invoc.callRequestId, null, yield.arguments, yield.argumentsKw);
-            invoc.caller.ctx.writeAndFlush(result);
+            invoc.caller.controller.sendMessage(result, IWampConnectionPromise.Empty);
         } else if (msg instanceof ErrorMessage) {
             ErrorMessage err = (ErrorMessage) msg;
             if (!(IdValidator.isValidId(err.requestId))) {
@@ -436,7 +525,7 @@ public class WampRouter {
                     // The Message provider has sent us an invalid URI for the error string
                     // We better don't forward it but instead close the connection, which will
                     // give the original caller an unknown message error
-                    closeActiveChannel(handler, new GoodbyeMessage(null, ApplicationError.INVALID_ARGUMENT));
+                    closeActiveClient(handler, new GoodbyeMessage(null, ApplicationError.INVALID_ARGUMENT));
                     return;
                 }
                 
@@ -450,7 +539,7 @@ public class WampRouter {
                 // Send the result to the original caller
                 ErrorMessage fwdError = new ErrorMessage(CallMessage.ID, invoc.callRequestId, 
                     null, err.error, err.arguments, err.argumentsKw);
-                invoc.caller.ctx.writeAndFlush(fwdError);                
+                invoc.caller.controller.sendMessage(fwdError, IWampConnectionPromise.Empty);
             }
             // else TODO: Are there any other possibilities where a client could return ERROR
         } else if (msg instanceof RegisterMessage) {
@@ -477,7 +566,7 @@ public class WampRouter {
             if (err != null) { // If we have an error send that to the client
                 ErrorMessage errMsg = new ErrorMessage(RegisterMessage.ID, reg.requestId, 
                     null, err, null, null);
-                handler.ctx.writeAndFlush(errMsg);
+                handler.controller.sendMessage(errMsg, IWampConnectionPromise.Empty);
                 return;
             }
             
@@ -495,7 +584,7 @@ public class WampRouter {
             handler.providedProcedures.put(procInfo.registrationId, procInfo);
             
             RegisteredMessage response = new RegisteredMessage(reg.requestId, procInfo.registrationId);
-            handler.ctx.writeAndFlush(response);
+            handler.controller.sendMessage(response, IWampConnectionPromise.Empty);
         } else if (msg instanceof UnregisterMessage) {
             // The client wants to unregister a procedure
             // Verify the message
@@ -523,7 +612,7 @@ public class WampRouter {
             if (err != null) { // If we have an error send that to the client
                 ErrorMessage errMsg = new ErrorMessage(UnregisterMessage.ID, unreg.requestId, 
                     null, err, null, null);
-                handler.ctx.writeAndFlush(errMsg);
+                handler.controller.sendMessage(errMsg, IWampConnectionPromise.Empty);
                 return;
             }
             
@@ -533,7 +622,7 @@ public class WampRouter {
                 if (invoc.caller.state == RouterHandlerState.Open) {
                     ErrorMessage errMsg = new ErrorMessage(CallMessage.ID, invoc.callRequestId, 
                         null, ApplicationError.NO_SUCH_PROCEDURE, null, null);
-                    invoc.caller.ctx.writeAndFlush(errMsg);
+                    invoc.caller.controller.sendMessage(errMsg, IWampConnectionPromise.Empty);
                 }
             }
             proc.pendingCalls.clear();
@@ -549,7 +638,7 @@ public class WampRouter {
             
             // Send the acknowledge
             UnregisteredMessage response = new UnregisteredMessage(unreg.requestId);
-            handler.ctx.writeAndFlush(response);
+            handler.controller.sendMessage(response, IWampConnectionPromise.Empty);
         } else if (msg instanceof SubscribeMessage) {
             // The client wants to subscribe to a procedure
             // Verify the message
@@ -595,7 +684,7 @@ public class WampRouter {
             if (err != null) { // If we have an error send that to the client
                 ErrorMessage errMsg = new ErrorMessage(SubscribeMessage.ID, sub.requestId, 
                     null, err, null, null);
-                handler.ctx.writeAndFlush(errMsg);
+                handler.controller.sendMessage(errMsg, IWampConnectionPromise.Empty);
                 return;
             }
             
@@ -632,7 +721,7 @@ public class WampRouter {
             }
             
             SubscribedMessage response = new SubscribedMessage(sub.requestId, subscription.subscriptionId);
-            handler.ctx.writeAndFlush(response);
+            handler.controller.sendMessage(response, IWampConnectionPromise.Empty);
         } else if (msg instanceof UnsubscribeMessage) {
             // The client wants to cancel a subscription
             // Verify the message
@@ -658,7 +747,7 @@ public class WampRouter {
             if (err != null) { // If we have an error send that to the client
                 ErrorMessage errMsg = new ErrorMessage(UnsubscribeMessage.ID, unsub.requestId, 
                     null, err, null, null);
-                handler.ctx.writeAndFlush(errMsg);
+                handler.controller.sendMessage(errMsg, IWampConnectionPromise.Empty);
                 return;
             }
 
@@ -679,7 +768,7 @@ public class WampRouter {
             
             // Send the acknowledge
             UnsubscribedMessage response = new UnsubscribedMessage(unsub.requestId);
-            handler.ctx.writeAndFlush(response);
+            handler.controller.sendMessage(response, IWampConnectionPromise.Empty);
         } else if (msg instanceof PublishMessage) {
             // The client wants to publish something to all subscribers (apart from himself)
             PublishMessage pub = (PublishMessage) msg;
@@ -705,7 +794,7 @@ public class WampRouter {
                 ErrorMessage errMsg = new ErrorMessage(PublishMessage.ID, pub.requestId, 
                     null, err, null, null);
                 if (sendAcknowledge) {
-                    handler.ctx.writeAndFlush(errMsg);
+                    handler.controller.sendMessage(errMsg, IWampConnectionPromise.Empty);
                 }
                 return;
             }
@@ -747,12 +836,12 @@ public class WampRouter {
 
             if (sendAcknowledge) {
                 PublishedMessage response = new PublishedMessage(pub.requestId, publicationId);
-                handler.ctx.writeAndFlush(response);
+                handler.controller.sendMessage(response, IWampConnectionPromise.Empty);
             }
         }
     }
 
-    private void publishEvent(WampRouterHandler publisher, PublishMessage pub, long publicationId, Subscription subscription){
+    private void publishEvent(ClientHandler publisher, PublishMessage pub, long publicationId, Subscription subscription){
         ObjectNode details = null;
         if (subscription.flags != SubscriptionFlags.Exact) {
             details = objectMapper.createObjectNode();
@@ -762,7 +851,7 @@ public class WampRouter {
         EventMessage ev = new EventMessage(subscription.subscriptionId, publicationId,
                 details, pub.arguments, pub.argumentsKw);
 
-        for (WampRouterHandler receiver : subscription.subscribers) {
+        for (ClientHandler receiver : subscription.subscribers) {
             if (receiver == publisher ) { // Potentially skip the publisher
                 boolean skipPublisher = true;
                 if (pub.options != null) {
@@ -775,16 +864,16 @@ public class WampRouter {
             }
 
             // Publish the event to the subscriber
-            receiver.ctx.writeAndFlush(ev);
+            receiver.controller.sendMessage(ev, IWampConnectionPromise.Empty);
         }
     }
     
-    private void onMessageFromUnregisteredChannel(WampRouterHandler channelHandler, WampMessage msg)
+    private void onMessageFromUnregisteredChannel(ClientHandler channelHandler, WampMessage msg)
     {
         // Only HELLO is allowed when a channel is not registered
         if (!(msg instanceof HelloMessage)) {
             // Close the connection
-            closePassiveChannel(channelHandler);
+            closePassiveClient(channelHandler);
             return;
         }
         
@@ -803,7 +892,7 @@ public class WampRouter {
         
         if (errorMsg != null) {
             AbortMessage abort = new AbortMessage(null, errorMsg);
-            channelHandler.ctx.writeAndFlush(abort);
+            channelHandler.controller.sendMessage(abort, IWampConnectionPromise.Empty);
             return;
         }
         
@@ -823,7 +912,7 @@ public class WampRouter {
         
         if (roles.size() == 0 || hasUnsupportedRoles) {
             AbortMessage abort = new AbortMessage(null, ApplicationError.NO_SUCH_ROLE);
-            channelHandler.ctx.writeAndFlush(abort);
+            channelHandler.controller.sendMessage(abort, IWampConnectionPromise.Empty);
             return;
         }
         
@@ -833,7 +922,7 @@ public class WampRouter {
         // Include the channel into the realm
         realm.includeChannel(channelHandler, sessionId, roles);
         // Remove the channel from the idle channel list - It is no longer idle
-        idleChannels.remove(channelHandler.ctx.channel());
+        idleChannels.remove(channelHandler.controller);
         
         // Expose the roles that are configured for the realm
         ObjectNode welcomeDetails = objectMapper.createObjectNode();
@@ -852,25 +941,25 @@ public class WampRouter {
         
         // Respond with the WELCOME message
         WelcomeMessage welcome = new WelcomeMessage(channelHandler.sessionId, welcomeDetails);
-        channelHandler.ctx.writeAndFlush(welcome);
+        channelHandler.controller.sendMessage(welcome, IWampConnectionPromise.Empty);
     }
     
-    private void closeActiveChannel(WampRouterHandler channel, WampMessage closeMessage) {
+    private void closeActiveClient(ClientHandler channel, WampMessage closeMessage) {
         if (channel == null) return;
         
         channel.realm.removeChannel(channel, true);
         channel.markAsClosed();
         
-        if (channel.ctx != null) {
-            Object m = (closeMessage == null) ? Unpooled.EMPTY_BUFFER : closeMessage;
-            channel.ctx.writeAndFlush(m)
-               .addListener(ChannelFutureListener.CLOSE);
+        if (channel.controller != null) {
+            if (closeMessage != null)
+                channel.controller.sendMessage(closeMessage, IWampConnectionPromise.Empty);
+            closeConnection(channel.controller, true);
         }
     }
     
-    private void closePassiveChannel(WampRouterHandler channelHandler) {
-        idleChannels.remove(channelHandler.ctx.channel());
+    private void closePassiveClient(ClientHandler channelHandler) {
+        idleChannels.remove(channelHandler.controller);
         channelHandler.markAsClosed();
-        channelHandler.ctx.close();
+        closeConnection(channelHandler.controller, false);
     }
 }

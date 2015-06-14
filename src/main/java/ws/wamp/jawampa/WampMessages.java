@@ -96,9 +96,9 @@ public class WampMessages {
      * attaching to a Realm. Format: [HELLO, Realm|uri, Details|dict]
      */
     public static class HelloMessage extends WampMessage {
-        final static int ID = 1;
-        String realm;
-        ObjectNode details;
+        public final static int ID = 1;
+        public String realm;
+        public ObjectNode details;
 
         public HelloMessage(String realm, ObjectNode details) {
             this.realm = realm;
@@ -135,9 +135,9 @@ public class WampMessages {
      * Format: [WELCOME, Session|id, Details|dict]
      */
     public static class WelcomeMessage extends WampMessage {
-        final static int ID = 2;
-        long sessionId;
-        ObjectNode details;
+        public final static int ID = 2;
+        public long sessionId;
+        public ObjectNode details;
 
         public WelcomeMessage(long sessionId, ObjectNode details) {
             this.sessionId = sessionId;
@@ -175,9 +175,9 @@ public class WampMessages {
      * expected. [ABORT, Details|dict, Reason|uri]
      */
     public static class AbortMessage extends WampMessage {
-        final static int ID = 3;
-        ObjectNode details;
-        String reason;
+        public final static int ID = 3;
+        public ObjectNode details;
+        public String reason;
 
         public AbortMessage(ObjectNode details, String reason) {
             this.details = details;
@@ -214,9 +214,9 @@ public class WampMessages {
      * Format: [CHALLENGE, AuthMethod|string, Extra|dict]
      */
     public static class ChallengeMessage extends WampMessage {
-        final static int ID = 4;
-        String authMethod;
-        ObjectNode extra;
+        public final static int ID = 4;
+        public String authMethod;
+        public ObjectNode extra;
 
         public ChallengeMessage(String authMethod, ObjectNode extra) {
             this.authMethod = authMethod;
@@ -254,9 +254,9 @@ public class WampMessages {
      * Format: [AUTHENTICATE, Signature|string, Extra|dict]
      */
     public static class AuthenticateMessage extends WampMessage {
-        final static int ID = 5;
-        String signature;
-        ObjectNode extra;
+        public final static int ID = 5;
+        public String signature;
+        public ObjectNode extra;
 
         public AuthenticateMessage(String signature, ObjectNode extra) {
             this.signature = signature;
@@ -294,9 +294,9 @@ public class WampMessages {
      * by the receiving Peer. Format: [GOODBYE, Details|dict, Reason|uri]
      */
     public static class GoodbyeMessage extends WampMessage {
-        final static int ID = 6;
-        ObjectNode details;
-        String reason;
+        public final static int ID = 6;
+        public ObjectNode details;
+        public String reason;
 
         public GoodbyeMessage(ObjectNode details, String reason) {
             this.details = details;
@@ -338,13 +338,13 @@ public class WampMessages {
      * ArgumentsKw|dict]
      */
     public static class ErrorMessage extends WampMessage {
-        final static int ID = 8;
-        int requestType;
-        long requestId;
-        ObjectNode details;
-        String error;
-        ArrayNode arguments;
-        ObjectNode argumentsKw;
+        public final static int ID = 8;
+        public int requestType;
+        public long requestId;
+        public ObjectNode details;
+        public String error;
+        public ArrayNode arguments;
+        public ObjectNode argumentsKw;
 
         public ErrorMessage(int requestType, long requestId,
                 ObjectNode details, String error, ArrayNode arguments,
@@ -417,12 +417,12 @@ public class WampMessages {
      * Options|dict, Topic|uri, Arguments|list, ArgumentsKw|dict]
      */
     public static class PublishMessage extends WampMessage {
-        final static int ID = 16;
-        long requestId;
-        ObjectNode options;
-        String topic;
-        ArrayNode arguments;
-        ObjectNode argumentsKw;
+        public final static int ID = 16;
+        public long requestId;
+        public ObjectNode options;
+        public String topic;
+        public ArrayNode arguments;
+        public ObjectNode argumentsKw;
 
         public PublishMessage(long requestId, ObjectNode options, String topic,
                 ArrayNode arguments, ObjectNode argumentsKw) {
@@ -488,9 +488,9 @@ public class WampMessages {
      * publications. [PUBLISHED, PUBLISH.Request|id, Publication|id]
      */
     public static class PublishedMessage extends WampMessage {
-        final static int ID = 17;
-        long requestId;
-        long publicationId;
+        public final static int ID = 17;
+        public long requestId;
+        public long publicationId;
 
         public PublishedMessage(long requestId, long publicationId) {
             this.requestId = requestId;
@@ -526,10 +526,10 @@ public class WampMessages {
      * topic. [SUBSCRIBE, Request|id, Options|dict, Topic|uri]
      */
     public static class SubscribeMessage extends WampMessage {
-        final static int ID = 32;
-        long requestId;
-        ObjectNode options;
-        String topic;
+        public final static int ID = 32;
+        public long requestId;
+        public ObjectNode options;
+        public String topic;
 
         public SubscribeMessage(long requestId, ObjectNode options, String topic) {
             this.requestId = requestId;
@@ -572,9 +572,9 @@ public class WampMessages {
      * subscription. [SUBSCRIBED, SUBSCRIBE.Request|id, Subscription|id]
      */
     public static class SubscribedMessage extends WampMessage {
-        final static int ID = 33;
-        long requestId;
-        long subscriptionId;
+        public final static int ID = 33;
+        public long requestId;
+        public long subscriptionId;
 
         public SubscribedMessage(long requestId, long subscriptionId) {
             this.requestId = requestId;
@@ -610,9 +610,9 @@ public class WampMessages {
      * subscription. [UNSUBSCRIBE, Request|id, SUBSCRIBED.Subscription|id]
      */
     public static class UnsubscribeMessage extends WampMessage {
-        final static int ID = 34;
-        long requestId;
-        long subscriptionId;
+        public final static int ID = 34;
+        public long requestId;
+        public long subscriptionId;
 
         public UnsubscribeMessage(long requestId, long subsriptionId) {
             this.requestId = requestId;
@@ -648,8 +648,8 @@ public class WampMessages {
      * unsubscription. [UNSUBSCRIBED, UNSUBSCRIBE.Request|id]
      */
     public static class UnsubscribedMessage extends WampMessage {
-        final static int ID = 35;
-        long requestId;
+        public final static int ID = 35;
+        public long requestId;
 
         public UnsubscribedMessage(long requestId) {
             this.requestId = requestId;
@@ -685,12 +685,12 @@ public class WampMessages {
      * PUBLISH.Arguments|list, PUBLISH.ArgumentsKw|dict]
      */
     public static class EventMessage extends WampMessage {
-        final static int ID = 36;
-        long subscriptionId;
-        long publicationId;
-        ObjectNode details;
-        ArrayNode arguments;
-        ObjectNode argumentsKw;
+        public final static int ID = 36;
+        public long subscriptionId;
+        public long publicationId;
+        public ObjectNode details;
+        public ArrayNode arguments;
+        public ObjectNode argumentsKw;
 
         public EventMessage(long subscriptionId, long publicationId,
                 ObjectNode details, ArrayNode arguments, ObjectNode argumentsKw) {
@@ -758,12 +758,12 @@ public class WampMessages {
      * Procedure|uri, Arguments|list, ArgumentsKw|dict]
      */
     public static class CallMessage extends WampMessage {
-        final static int ID = 48;
-        long requestId;
-        ObjectNode options;
-        String procedure;
-        ArrayNode arguments;
-        ObjectNode argumentsKw;
+        public final static int ID = 48;
+        public long requestId;
+        public ObjectNode options;
+        public String procedure;
+        public ArrayNode arguments;
+        public ObjectNode argumentsKw;
 
         public CallMessage(long requestId, ObjectNode options, String procedure,
                 ArrayNode arguments, ObjectNode argumentsKw) {
@@ -831,11 +831,11 @@ public class WampMessages {
      * YIELD.Arguments|list, YIELD.ArgumentsKw|dict]
      */
     public static class ResultMessage extends WampMessage {
-        final static int ID = 50;
-        long requestId;
-        ObjectNode details;
-        ArrayNode arguments;
-        ObjectNode argumentsKw;
+        public final static int ID = 50;
+        public long requestId;
+        public ObjectNode details;
+        public ArrayNode arguments;
+        public ObjectNode argumentsKw;
 
         public ResultMessage(long requestId, ObjectNode details,
                 ArrayNode arguments, ObjectNode argumentsKw) {
@@ -897,10 +897,10 @@ public class WampMessages {
      * Request|id, Options|dict, Procedure|uri]
      */
     public static class RegisterMessage extends WampMessage {
-        final static int ID = 64;
-        long requestId;
-        ObjectNode options;
-        String procedure;
+        public final static int ID = 64;
+        public long requestId;
+        public ObjectNode options;
+        public String procedure;
 
         public RegisterMessage(long requestId, ObjectNode options, String procedure) {
             this.requestId = requestId;
@@ -943,9 +943,9 @@ public class WampMessages {
      * [REGISTERED, REGISTER.Request|id, Registration|id]
      */
     public static class RegisteredMessage extends WampMessage {
-        final static int ID = 65;
-        long requestId;
-        long registrationId;
+        public final static int ID = 65;
+        public long requestId;
+        public long registrationId;
 
         public RegisteredMessage(long requestId, long registrationId) {
             this.requestId = requestId;
@@ -982,9 +982,9 @@ public class WampMessages {
      * 
      */
     public static class UnregisterMessage extends WampMessage {
-        final static int ID = 66;
-        long requestId;
-        long registrationId;
+        public final static int ID = 66;
+        public long requestId;
+        public long registrationId;
 
         public UnregisterMessage(long requestId, long registrationId) {
             this.requestId = requestId;
@@ -1021,8 +1021,8 @@ public class WampMessages {
      * [UNREGISTERED, UNREGISTER.Request|id]
      */
     public static class UnregisteredMessage extends WampMessage {
-        final static int ID = 67;
-        long requestId;
+        public final static int ID = 67;
+        public long requestId;
 
         public UnregisteredMessage(long requestId) {
             this.requestId = requestId;
@@ -1057,12 +1057,12 @@ public class WampMessages {
      * Details|dict, CALL.Arguments|list, CALL.ArgumentsKw|dict]
      */
     public static class InvocationMessage extends WampMessage {
-        final static int ID = 68;
-        long requestId;
-        long registrationId;
-        ObjectNode details;
-        ArrayNode arguments;
-        ObjectNode argumentsKw;
+        public final static int ID = 68;
+        public long requestId;
+        public long registrationId;
+        public ObjectNode details;
+        public ArrayNode arguments;
+        public ObjectNode argumentsKw;
 
         public InvocationMessage(long requestId, long registrationId,
                 ObjectNode details, ArrayNode arguments, ObjectNode argumentsKw) {
@@ -1130,11 +1130,11 @@ public class WampMessages {
      * Options|dict, Arguments|list, ArgumentsKw|dict]
      */
     public static class YieldMessage extends WampMessage {
-        final static int ID = 70;
-        long requestId;
-        ObjectNode options;
-        ArrayNode arguments;
-        ObjectNode argumentsKw;
+        public final static int ID = 70;
+        public long requestId;
+        public ObjectNode options;
+        public ArrayNode arguments;
+        public ObjectNode argumentsKw;
 
         public YieldMessage(long requestId, ObjectNode options,
                 ArrayNode arguments, ObjectNode argumentsKw) {

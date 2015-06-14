@@ -16,8 +16,6 @@
 
 package ws.wamp.jawampa;
 
-import io.netty.handler.ssl.SslContext;
-
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -25,9 +23,11 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import ws.wamp.jawampa.auth.client.ClientSideAuthentication;
+import ws.wamp.jawampa.client.ClientConfiguration;
+import ws.wamp.jawampa.connection.IWampClientConnectionConfig;
+import ws.wamp.jawampa.connection.IWampConnector;
+import ws.wamp.jawampa.connection.IWampConnectorProvider;
 import ws.wamp.jawampa.internal.UriValidator;
-import ws.wamp.jawampa.transport.WampClientChannelFactory;
-import ws.wamp.jawampa.transport.WampClientChannelFactoryResolver;
 
 /**
  * WampClientBuilder is the builder object which allows to create
@@ -39,7 +39,7 @@ public class WampClientBuilder {
     
     String uri;
     String realm;
-    SslContext sslContext;
+    
     int nrReconnects = 0;
     int reconnectInterval = DEFAULT_RECONNECT_INTERVAL;
     boolean useStrictUriValidation = false;
@@ -48,6 +48,9 @@ public class WampClientBuilder {
     List<WampSerialization> serializations = new ArrayList<WampSerialization>();
     String authId = null;
     List<ClientSideAuthentication> authMethods = new ArrayList<ClientSideAuthentication>();
+    
+    IWampClientConnectionConfig connectionConfiguration = null;
+    IWampConnectorProvider connectorProvider = null;
     
     /** The default reconnect interval in milliseconds.<br>This is set to 5s */
     public static final int DEFAULT_RECONNECT_INTERVAL = 5000;
@@ -75,7 +78,7 @@ public class WampClientBuilder {
      * @return The created WAMP client
      * @throws WampError if any parameter is not invalid
      */
-    public WampClient build() throws ApplicationError {
+    public WampClient build() throws Exception {
         if (uri == null)
             throw new ApplicationError(ApplicationError.INVALID_URI);
         
@@ -111,25 +114,22 @@ public class WampClientBuilder {
         if (serializations.size() == 0) {
             throw new ApplicationError(ApplicationError.INVALID_SERIALIZATIONS);
         }
-
-        WampClientChannelFactory channelFactory = 
-            WampClientChannelFactoryResolver.getFactory(routerUri, sslContext, serializations);
         
-        return new WampClient(routerUri, realm, rolesArray,
-                useStrictUriValidation, closeOnErrors, 
-                channelFactory, nrReconnects, reconnectInterval,
-                authId, authMethods);
-    }
-    
-    /**
-     * Sets the address of the router to which the new client shall connect.
-     * @param uri The address of the router, e.g. ws://wamp.ws/ws
-     * @return The {@link WampClientBuilder} object
-     * @deprecated This method existed only due to a typo and will be removed
-     */
-    public WampClientBuilder witUri(String uri) {
-        this.uri = uri;
-        return this;
+        if (connectorProvider == null)
+            throw new ApplicationError(ApplicationError.INVALID_CONNECTOR_PROVIDER);
+        
+        // Build a connector that can be used by the client afterwards
+        // This can throw!
+        IWampConnector connector =
+            connectorProvider.createConnector(routerUri, connectionConfiguration, serializations);
+        
+        ClientConfiguration clientConfig =
+            new ClientConfiguration(
+                closeOnErrors, authId, authMethods, routerUri, realm,
+                useStrictUriValidation, rolesArray, nrReconnects, reconnectInterval,
+                connectorProvider, connector);
+        
+        return new WampClient(clientConfig);
     }
     
     /**
@@ -166,6 +166,31 @@ public class WampClientBuilder {
         for (WampRoles role : roles) {
             this.roles.add(role);
         }
+        return this;
+    }
+    
+    /**
+     * Assigns a connector provider to the WampClient. This provider will be used to
+     * establish connections to the server.<br>
+     * By using a different ConnectorProvider a different transport framework can be used
+     * for data exchange between client and server.
+     * @param The {@link IWampConnectorProvider} that should be used
+     * @return The {@link WampClientBuilder} object
+     */
+    public WampClientBuilder withConnectorProvider(IWampConnectorProvider provider) {
+        this.connectorProvider = provider;
+        return this;
+    }
+    
+    /**
+     * Assigns additional configuration data for a connection that should be used.<br>
+     * The type of this configuration data depends on the used {@link IWampConnectorProvider}.<br>
+     * Depending on the provider this might be null or not.
+     * @param The {@link IWampClientConnectionConfig} that should be used
+     * @return The {@link WampClientBuilder} object
+     */
+    public WampClientBuilder withConnectionConfiguration(IWampClientConnectionConfig configuration) {
+        this.connectionConfiguration = configuration;
         return this;
     }
 
@@ -260,18 +285,6 @@ public class WampClientBuilder {
         if (intervalMs < MIN_RECONNECT_INTERVAL || intervalMs > Integer.MAX_VALUE)
             throw new ApplicationError(ApplicationError.INVALID_RECONNECT_INTERVAL);
         this.reconnectInterval = (int)intervalMs;
-        return this;
-    }
-    
-    /**
-     * Allows to set the SslContext which will be used to create Ssl connections to the WAMP
-     * router. If this is set to null a default (unsecure) SSL client context will be created
-     * and used. 
-     * @param sslContext The SslContext that will be used for SSL connections.
-     * @return The {@link WampClientBuilder} object
-     */
-    public WampClientBuilder withSslContext(SslContext sslContext) {
-        this.sslContext = sslContext;
         return this;
     }
 

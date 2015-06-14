@@ -24,12 +24,13 @@ import rx.Subscription;
 import rx.functions.Action1;
 import ws.wamp.jawampa.ApplicationError;
 import ws.wamp.jawampa.Request;
-import ws.wamp.jawampa.WampError;
 import ws.wamp.jawampa.WampRouter;
 import ws.wamp.jawampa.WampRouterBuilder;
 import ws.wamp.jawampa.WampClient;
 import ws.wamp.jawampa.WampClientBuilder;
-import ws.wamp.jawampa.transport.SimpleWampWebsocketListener;
+import ws.wamp.jawampa.connection.IWampConnectorProvider;
+import ws.wamp.jawampa.transport.netty.NettyWampClientConnectorProvider;
+import ws.wamp.jawampa.transport.netty.SimpleWampWebsocketListener;
 
 public class Benchmark {
     
@@ -63,6 +64,8 @@ public class Benchmark {
         
         URI serverUri = URI.create("ws://0.0.0.0:8080/bench");
         SimpleWampWebsocketListener server;
+        
+        IWampConnectorProvider connectorProvider = new NettyWampClientConnectorProvider();
 
         try {
             server = new SimpleWampWebsocketListener(router, serverUri, null);
@@ -70,13 +73,14 @@ public class Benchmark {
 
             WampClientBuilder builder = new WampClientBuilder();
             
-            builder.withUri("ws://localhost:8080/bench")
+            builder.withConnectorProvider(connectorProvider)
+                   .withUri("ws://localhost:8080/bench")
                    .withRealm("realm2")
                    .withInfiniteReconnects()
                    .withReconnectInterval(1, TimeUnit.SECONDS);
             client1 = builder.build();
             client2 = builder.build();
-        } catch (WampError e) {
+        } catch (Exception e) {
             e.printStackTrace();
             return;
         }
@@ -146,10 +150,12 @@ public class Benchmark {
         
         System.out.println("Nr of errors: " + nrErrors);
         
-        client1.close();
-        client2.close();
+        client1.close().toBlocking().last();
+        client2.close().toBlocking().last();
         
         server.stop();
+        
+        router.close().toBlocking().last();
     }
     
     void makeNextCall() {
