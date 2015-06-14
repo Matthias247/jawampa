@@ -79,10 +79,11 @@ try {
 ~~~~
 
 The `WampClient` object provides the RxJava `Observable` `statusChanged()` that
-notifies the user about the current status of the session between the client and
-the router, which can be either `Disconnected`, `Connecting` or `Connected`.  
-The application can monitor this `Observable` to detect when other steps should
-be performed (e.g. subscribe to topics or register functions after connect).
+notifies the user about the current status of the session between the client
+and the router, which can be either `DisconnectedState`, `ConnectingState` or
+`ConnectedState`. The application can monitor this `Observable` to detect when
+other steps should be performed (e.g. subscribe to topics or register functions
+after connect).
 
 The `onNext()` status notification method of the Subscriber will be called on
 the `WampClient`s thread. However it can easily be delegated to a Scheduler or
@@ -99,21 +100,22 @@ only in case of state changes.
 
 client.statusChanged()
       .observeOn(applicationScheduler)
-      .subscribe((WampClient.Status newStatus) -> {
-        if (newStatus == WampClient.Status.Connected) {
+      .subscribe((WampClient.State newState) -> {
+        if (newState instanceof WampClient.ConnectedState) {
           // Client got connected to the remote router
           // and the session was established
-        } else if (newStatus == WampClient.Status.Disconnected) {
+        } else if (newState instanceof WampClient.DisconnectedState) {
           // Client got disconnected from the remoute router
           // or the last possible connect attempt failed
-        } else if (newStatus == WampClient.Status.Connecting) {
+        } else if (newState instanceof WampClient.ConnectingState) {
           // Client starts connecting to the remote router
         }});
 ~~~~
 
 In order to start the connection between a client and a router the clients
 `open()` member function has to be called. This will lead to the first
-connection attempt and a state change from `Disconnected` to `Connecting`.
+connection attempt and a state change from `DisconnectedState` to
+`ConnectingState`.
 
 When the client is no longer needed is **must** be closed with the `close()`
 member function. This will shutdown the connection to the remote router and stop
