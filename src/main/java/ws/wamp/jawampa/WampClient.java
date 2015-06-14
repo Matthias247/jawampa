@@ -97,15 +97,15 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 public class WampClient {
     
     /** Base type for all possible client states */
-    public interface Status {
+    public interface State {
         
     }
     
     /** The session is not connected */
-    public static class ClientDisconnected implements Status {
+    public static class DisconnectedState implements State {
         private final Exception disconnectReason;
         
-        public ClientDisconnected(Exception closeReason) {
+        public DisconnectedState(Exception closeReason) {
             this.disconnectReason = closeReason;
         }
         
@@ -126,7 +126,7 @@ public class WampClient {
     }
     
     /** The session is trying to connect to the router */
-    public static class ClientConnecting implements Status {
+    public static class ConnectingState implements State {
         @Override
         public String toString() {
             return "Connecting";
@@ -137,17 +137,19 @@ public class WampClient {
      * The client is connected to the router, has send a Hello message,
      * but has not received a welcome message.
      */
-    private static class ClientWaitingForWelcome implements Status {
+    private static class WaitingForWelcomeState implements State {
         
     }
     
-    /** The session is connected to the router */
-    public static class ClientConnected implements Status {
+    /**
+     * The client is connected to the router and the session was established
+     */
+    public static class ConnectedState implements State {
         private final long sessionId;
         private final ObjectNode welcomeDetails;
         private final EnumSet<WampRoles> routerRoles;
         
-        public ClientConnected(long sessionId, ObjectNode welcomeDetails, EnumSet<WampRoles> routerRoles) {
+        public ConnectedState(long sessionId, ObjectNode welcomeDetails, EnumSet<WampRoles> routerRoles) {
             this.sessionId = sessionId;
             this.welcomeDetails = welcomeDetails;
             this.routerRoles = routerRoles;
@@ -180,8 +182,8 @@ public class WampClient {
     }
 
     /** The current status */
-    Status status = new ClientDisconnected(null);
-    BehaviorSubject<Status> statusObservable = BehaviorSubject.create(status);
+    State status = new DisconnectedState(null);
+    BehaviorSubject<State> statusObservable = BehaviorSubject.create(status);
     
     final EventLoopGroup eventLoop;
     final Scheduler scheduler;
@@ -348,8 +350,8 @@ public class WampClient {
                 // This happens in both connecting and disconnected case
                 remainingNrReconnects = totalNrReconnects;
                 if (remainingNrReconnects > 0) remainingNrReconnects--;
-                if (status instanceof ClientDisconnected) {
-                    status = new ClientConnecting();
+                if (status instanceof DisconnectedState) {
+                    status = new ConnectingState();
                     statusObservable.onNext(status);
                     beginConnect();
                 }
@@ -372,7 +374,7 @@ public class WampClient {
         // Check for possible reconnects
         if (remainingNrReconnects == 0) return;
         
-        status = new ClientConnecting();
+        status = new ConnectingState();
         
         // Decrease remaining number of reconnects if it's not infinite
         if (remainingNrReconnects > 0) remainingNrReconnects--;
@@ -460,7 +462,7 @@ public class WampClient {
                 
                 ctx.writeAndFlush(new WampMessages.HelloMessage(realm, o));
                 
-                status = new ClientWaitingForWelcome();
+                status = new WaitingForWelcomeState();
             }
         }
 
@@ -525,7 +527,7 @@ public class WampClient {
     }
 
     private void closeCurrentTransport(Exception e) {
-        if (status instanceof ClientDisconnected) return;
+        if (status instanceof DisconnectedState) return;
         
         if (channel != null) {
             channel.writeAndFlush(Unpooled.EMPTY_BUFFER)
@@ -545,7 +547,7 @@ public class WampClient {
             reconnectSubscription = null;
         }
 
-        status = new ClientDisconnected(e);
+        status = new DisconnectedState(e);
         
         clearPendingRequests(new ApplicationError(ApplicationError.TRANSPORT_CLOSED));
         clearAllSubscriptions(null);
@@ -568,19 +570,19 @@ public class WampClient {
             public void run() {
                 if (!isCompleted) // Check if already closed
                 {
-                    if (status instanceof ClientConnected) {
+                    if (status instanceof ConnectedState) {
                         // Send goodbye to the remote
                         GoodbyeMessage msg = new GoodbyeMessage(null, 
                             ApplicationError.SYSTEM_SHUTDOWN);
                         channel.writeAndFlush(msg);
-                    } else if (status instanceof ClientWaitingForWelcome) {
+                    } else if (status instanceof WaitingForWelcomeState) {
                         // Send abort to the remote
                         AbortMessage msg = new AbortMessage(null,
                             ApplicationError.SYSTEM_SHUTDOWN);
                         channel.writeAndFlush(msg);
                     }
                     
-                    if (!(status instanceof ClientDisconnected)) {
+                    if (!(status instanceof DisconnectedState)) {
                         // Close the connection (or connection attempt)
                         remainingNrReconnects = 0; // Don't reconnect
                         closeCurrentTransport(new ApplicationError(ApplicationError.CLIENT_CLOSED));
@@ -601,7 +603,7 @@ public class WampClient {
     /**
      * An Observable that allows to monitor the connection status of the Session.
      */
-    public Observable<Status> statusChanged() {
+    public Observable<State> statusChanged() {
         return statusObservable;
     }
     
@@ -627,7 +629,7 @@ public class WampClient {
     }
 
     private void onMessageReceived(WampMessage msg) {
-        if (status instanceof ClientWaitingForWelcome) {
+        if (status instanceof WaitingForWelcomeState) {
             // We were not yet welcomed
             if (msg instanceof WelcomeMessage) {
                 // Receive a welcome. Now the session is established!
@@ -649,7 +651,7 @@ public class WampClient {
                 }
                 
                 remainingNrReconnects = totalNrReconnects;
-                status = new ClientConnected(sessionId, welcomeDetails, routerRoles);
+                status = new ConnectedState(sessionId, welcomeDetails, routerRoles);
                 statusObservable.onNext(status);
             }
             else if (msg instanceof ChallengeMessage) {
@@ -953,7 +955,7 @@ public class WampClient {
         eventLoop.execute(new Runnable() {
             @Override
             public void run() {
-                if (!(status instanceof ClientConnected)) {
+                if (!(status instanceof ConnectedState)) {
                     resultSubject.onError(new ApplicationError(ApplicationError.NOT_CONNECTED));
                     return;
                 }
@@ -1023,7 +1025,7 @@ public class WampClient {
                         // If the Subscriber unsubscribed in the meantime we return early
                         if (subscriber.isUnsubscribed()) return;
                         // Set subscription to completed if we are not connected
-                        if (!(status instanceof ClientConnected)) {
+                        if (!(status instanceof ConnectedState)) {
                             subscriber.onCompleted();
                             return;
                         }
@@ -1278,7 +1280,7 @@ public class WampClient {
                         // If the Subscriber unsubscribed in the meantime we return early
                         if (subscriber.isUnsubscribed()) return;
                         // Set subscription to completed if we are not connected
-                        if (!(status instanceof ClientConnected)) {
+                        if (!(status instanceof ConnectedState)) {
                             subscriber.onCompleted();
                             return;
                         }
@@ -1453,7 +1455,7 @@ public class WampClient {
         eventLoop.execute(new Runnable() {
             @Override
             public void run() {
-                if (!(status instanceof ClientConnected)) {
+                if (!(status instanceof ConnectedState)) {
                     resultSubject.onError(new ApplicationError(ApplicationError.NOT_CONNECTED));
                     return;
                 }
@@ -1553,7 +1555,7 @@ public class WampClient {
      */
     public Future<Void> getTerminationFuture() {
         final Promise<Void> p = new Promise<Void>();
-        statusObservable.subscribe(new Observer<Status>() {
+        statusObservable.subscribe(new Observer<State>() {
             @Override
             public void onCompleted() {
                 p.resolve(null);
@@ -1565,7 +1567,7 @@ public class WampClient {
             }
 
             @Override
-            public void onNext(Status t) { }
+            public void onNext(State t) { }
         });
         return p.getFuture();
     }

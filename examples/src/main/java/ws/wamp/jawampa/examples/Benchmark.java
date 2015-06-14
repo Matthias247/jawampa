@@ -81,12 +81,12 @@ public class Benchmark {
             return;
         }
         
-        client1.statusChanged().subscribe(new Action1<WampClient.Status>() {
+        client1.statusChanged().subscribe(new Action1<WampClient.State>() {
             @Override
-            public void call(WampClient.Status t1) {
+            public void call(WampClient.State t1) {
                 System.out.println("Session status changed to " + t1);
 
-                if (t1 instanceof WampClient.ClientConnected) {
+                if (t1 instanceof WampClient.ConnectedState) {
                     
                     // Provide a procedure
                     procSubscription = client1
@@ -112,12 +112,12 @@ public class Benchmark {
             }
         });
 
-        client2.statusChanged().subscribe(new Action1<WampClient.Status>() {
+        client2.statusChanged().subscribe(new Action1<WampClient.State>() {
             @Override
-            public void call(WampClient.Status t1) {
+            public void call(WampClient.State t1) {
                 System.out.println("Session status changed to " + t1);
 
-                if (t1 instanceof WampClient.ClientConnected) {
+                if (t1 instanceof WampClient.ConnectedState) {
                     try {
                         // Wait until the other client could register the procedure
                         Thread.sleep(100);

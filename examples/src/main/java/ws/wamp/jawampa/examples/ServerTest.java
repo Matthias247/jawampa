@@ -82,12 +82,12 @@ public class ServerTest {
             return;
         }
 
-        client1.statusChanged().subscribe(new Action1<WampClient.Status>() {
+        client1.statusChanged().subscribe(new Action1<WampClient.State>() {
             @Override
-            public void call(WampClient.Status t1) {
+            public void call(WampClient.State t1) {
                 System.out.println("Session1 status changed to " + t1);
 
-                if (t1 instanceof WampClient.ClientConnected) {
+                if (t1 instanceof WampClient.ConnectedState) {
                     // Register a procedure
                     addProcSubscription = client1.registerProcedure("com.example.add").subscribe(new Action1<Request>() {
                         @Override
@@ -123,12 +123,12 @@ public class ServerTest {
             }
         });
         
-        client2.statusChanged().subscribe(new Action1<WampClient.Status>() {
+        client2.statusChanged().subscribe(new Action1<WampClient.State>() {
             @Override
-            public void call(WampClient.Status t1) {
+            public void call(WampClient.State t1) {
                 System.out.println("Session2 status changed to " + t1);
 
-                if (t1 instanceof WampClient.ClientConnected) {
+                if (t1 instanceof WampClient.ConnectedState) {
                     try {
                         Thread.sleep(100);
                     } catch (InterruptedException e) { }
