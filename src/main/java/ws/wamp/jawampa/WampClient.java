@@ -223,6 +223,8 @@ public class WampClient {
     final String authId;
     final List<ClientSideAuthentication> authMethods;
     
+    final ObjectNode callOptions;
+    
     final WampRoles[] clientRoles;
     
     enum PubSubState {
@@ -293,7 +295,8 @@ public class WampClient {
                boolean closeClientOnErrors,
                WampClientChannelFactory channelFactory,
                int nrReconnects, int reconnectInterval,
-               String authId, List<ClientSideAuthentication> authMethods)
+               String authId, List<ClientSideAuthentication> authMethods,
+               boolean discloseMe)
     {
         // Create an eventloop and the RX scheduler on top of it
         this.eventLoop = new NioEventLoopGroup(1, new ThreadFactory() {
@@ -316,6 +319,13 @@ public class WampClient {
         this.reconnectInterval = reconnectInterval;
         this.authId = authId;
         this.authMethods = new ArrayList<ClientSideAuthentication>(authMethods);
+        
+        if(discloseMe) {
+        	callOptions = objectMapper.createObjectNode();
+        	callOptions.put("disclose_me", true);
+        }
+        else
+        	callOptions = null;
 
         subscriptionsByFlags.put(SubscriptionFlags.Exact, new HashMap<String, SubscriptionMapEntry>());
         subscriptionsByFlags.put(SubscriptionFlags.Prefix, new HashMap<String, SubscriptionMapEntry>());
@@ -446,6 +456,9 @@ public class WampClient {
                     } else if (role == WampRoles.Subscriber) {
                         ObjectNode featuresNode = roleNode.putObject("features");
                         featuresNode.put("pattern_based_subscription", true);
+                    } else if (role == WampRoles.Caller || role == WampRoles.Callee) {
+                        ObjectNode featuresNode = roleNode.putObject("features");
+                        featuresNode.put("caller_identification", true);
                     }
                 }
                 
@@ -822,7 +835,7 @@ public class WampClient {
                 }
                 else {
                     // Send the request to the subscriber, which can then send responses
-                    Request request = new Request(this, channel, m.requestId, m.arguments, m.argumentsKw);
+                    Request request = new Request(this, channel, m.requestId, m.arguments, m.argumentsKw, m.details);
                     entry.subscriber.onNext(request);
                 }
             }
@@ -1462,7 +1475,7 @@ public class WampClient {
                 
                 final long requestId = IdGenerator.newLinearId(lastRequestId, requestMap);
                 lastRequestId = requestId;
-                final CallMessage callMsg = new CallMessage(requestId, null, procedure, 
+                final CallMessage callMsg = new CallMessage(requestId, callOptions, procedure, 
                                                             arguments, argumentsKw);
                 
                 requestMap.put(requestId, new RequestMapEntry(CallMessage.ID, resultSubject));
