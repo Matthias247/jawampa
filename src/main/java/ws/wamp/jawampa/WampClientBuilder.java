@@ -48,7 +48,6 @@ public class WampClientBuilder {
     List<WampSerialization> serializations = new ArrayList<WampSerialization>();
     String authId = null;
     List<ClientSideAuthentication> authMethods = new ArrayList<ClientSideAuthentication>();
-    boolean discloseMe = false;
     
     /** The default reconnect interval in milliseconds.<br>This is set to 5s */
     public static final int DEFAULT_RECONNECT_INTERVAL = 5000;
@@ -119,8 +118,7 @@ public class WampClientBuilder {
         return new WampClient(routerUri, realm, rolesArray,
                 useStrictUriValidation, closeOnErrors, 
                 channelFactory, nrReconnects, reconnectInterval,
-                authId, authMethods,
-                discloseMe);
+                authId, authMethods);
     }
     
     /**
@@ -296,18 +294,6 @@ public class WampClientBuilder {
    public WampClientBuilder withAuthMethod(ClientSideAuthentication authMethod) {
        this.authMethods.add( authMethod );
        return this;
-   }
-
-   /**
-    * Make this client disclose its WAMP session id to endpoints of routed calls.
-    * <p>
-    * This feature is disabled by default.
-    * </p>
-    * @return The {@link WampClientBuilder} object
-    */
-   public WampClientBuilder withCallerIdentification() {
-	   this.discloseMe = true;
-	   return this;
    }
 
 }

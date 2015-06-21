@@ -223,8 +223,6 @@ public class WampClient {
     final String authId;
     final List<ClientSideAuthentication> authMethods;
     
-    final ObjectNode callOptions;
-    
     final WampRoles[] clientRoles;
     
     enum PubSubState {
@@ -295,8 +293,7 @@ public class WampClient {
                boolean closeClientOnErrors,
                WampClientChannelFactory channelFactory,
                int nrReconnects, int reconnectInterval,
-               String authId, List<ClientSideAuthentication> authMethods,
-               boolean discloseMe)
+               String authId, List<ClientSideAuthentication> authMethods)
     {
         // Create an eventloop and the RX scheduler on top of it
         this.eventLoop = new NioEventLoopGroup(1, new ThreadFactory() {
@@ -320,13 +317,6 @@ public class WampClient {
         this.authId = authId;
         this.authMethods = new ArrayList<ClientSideAuthentication>(authMethods);
         
-        if(discloseMe) {
-        	callOptions = objectMapper.createObjectNode();
-        	callOptions.put("disclose_me", true);
-        }
-        else
-        	callOptions = null;
-
         subscriptionsByFlags.put(SubscriptionFlags.Exact, new HashMap<String, SubscriptionMapEntry>());
         subscriptionsByFlags.put(SubscriptionFlags.Prefix, new HashMap<String, SubscriptionMapEntry>());
         subscriptionsByFlags.put(SubscriptionFlags.Wildcard, new HashMap<String, SubscriptionMapEntry>());
@@ -1455,6 +1445,30 @@ public class WampClient {
                                   final ArrayNode arguments,
                                   final ObjectNode argumentsKw)
     {
+    	return call(procedure, null, arguments, argumentsKw);
+    }
+    
+    
+    /**
+     * Performs a remote procedure call through the router.<br>
+     * The function will return immediately, as the actual call will happen
+     * asynchronously.
+     * @param procedure The name of the procedure to call. Must be a valid WAMP
+     * Uri.
+     * @param flags Additional call flags if any. This can be null.
+     * @param arguments A list of all positional arguments for the procedure call
+     * @param argumentsKw All named arguments for the procedure call
+     * @return An observable that provides a notification whether the call was
+     * was successful and the return value. If the call is successful the
+     * returned observable will be completed with a single value (the return value).
+     * If the remote procedure call yields an error the observable will be completed
+     * with an error.
+     */
+    public Observable<Reply> call(final String procedure,
+                                  final EnumSet<CallFlags> flags,
+                                  final ArrayNode arguments,
+                                  final ObjectNode argumentsKw)
+    {
         final AsyncSubject<Reply> resultSubject = AsyncSubject.create();
         
         try {
@@ -1475,7 +1489,12 @@ public class WampClient {
                 
                 final long requestId = IdGenerator.newLinearId(lastRequestId, requestMap);
                 lastRequestId = requestId;
-                final CallMessage callMsg = new CallMessage(requestId, callOptions, procedure, 
+                
+                boolean discloseMe = (flags != null && flags.contains(CallFlags.DiscloseMe) ? true : false);
+                ObjectNode options = objectMapper.createObjectNode();
+                options.put("disclose_me", discloseMe);
+                
+                final CallMessage callMsg = new CallMessage(requestId, options, procedure, 
                                                             arguments, argumentsKw);
                 
                 requestMap.put(requestId, new RequestMapEntry(CallMessage.ID, resultSubject));
@@ -1536,7 +1555,41 @@ public class WampClient {
     public <T> Observable<T> call(final String procedure, 
                                   final Class<T> returnValueClass, Object... args)
     {
-        return call(procedure, buildArgumentsArray(args), null).map(new Func1<Reply,T>() {
+    	return call(procedure, null, returnValueClass, args);
+    }
+    
+    /**
+     * Performs a remote procedure call through the router.<br>
+     * The function will return immediately, as the actual call will happen
+     * asynchronously.<br>
+     * This overload of the call function will automatically map the received
+     * reply value into the specified Java type by using Jacksons object mapping
+     * facilities.<br>
+     * Only the first value in the array of positional arguments will be taken
+     * into account for the transformation. If multiple return values are required
+     * another overload of this function has to be used.<br>
+     * If the expected return type is not {@link Void} but the return value array
+     * contains no value or if the value in the array can not be deserialized into
+     * the expected type the returned {@link Observable} will be completed with
+     * an error.
+     * @param procedure The name of the procedure to call. Must be a valid WAMP
+     * Uri.
+     * @param flags Additional call flags if any. This can be null.
+     * @param returnValueClass The class of the expected return value. If the function
+     * uses no return values Void should be used.
+     * @param args The list of positional arguments for the remote procedure call.
+     * These will be get serialized according to the Jackson library serializing
+     * behavior.
+     * @return An observable that provides a notification whether the call was
+     * was successful and the return value. If the call is successful the
+     * returned observable will be completed with a single value (the return value).
+     * If the remote procedure call yields an error the observable will be completed
+     * with an error.
+     */
+    public <T> Observable<T> call(final String procedure, final EnumSet<CallFlags> flags,
+                                  final Class<T> returnValueClass, Object... args)
+    {
+        return call(procedure, flags, buildArgumentsArray(args), null).map(new Func1<Reply,T>() {
             @Override
             public T call(Reply reply) {
                 if (returnValueClass == null || returnValueClass == Void.class) {
