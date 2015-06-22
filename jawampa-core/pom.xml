@@ -4,7 +4,7 @@
     <parent>
         <groupId>ws.wamp.jawampa</groupId>
         <artifactId>jawampa-parent</artifactId>
-        <version>0.4.0</version>
+        <version>0.4.0-STAGING</version>
     </parent>
   
     <packaging>jar</packaging>
@@ -26,7 +26,6 @@
                 </configuration>
             </plugin>
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
                 <configuration>
                     <archive>
