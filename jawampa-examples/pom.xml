@@ -1,9 +1,14 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
+  
+  <parent>
+    <groupId>ws.wamp.jawampa</groupId>
+    <artifactId>jawampa-parent</artifactId>
+    <version>0.4.0</version>
+  </parent>
 
-  <groupId>ws.wamp.jawampa</groupId>
   <artifactId>jawampa-examples</artifactId>
-  <version>0.4.0</version>
+  <packaging>jar</packaging>
 
   <name>jawampa-examples</name>
   <url></url>
@@ -36,9 +41,9 @@
 
   <dependencies>
     <dependency>
-      <groupId>ws.wamp.jawampa</groupId>
+      <groupId>${project.groupId}</groupId>
       <artifactId>jawampa-netty</artifactId>
-      <version>0.4.0</version>
+      <version>${project.version}</version>
     </dependency>
   </dependencies>
 </project>
