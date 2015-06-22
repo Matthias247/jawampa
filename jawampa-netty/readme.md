@@ -6,24 +6,17 @@ protocol library.
 
 Install
 -------
-Add the following repository to your pom.xml:
 
-    <repository>
-      <id>jawampa.mvn-repo</id>
-      <url>https://raw.github.com/Matthias247/jawampa/mvn-repo/</url>
-      <snapshots>
-        <enabled>true</enabled>
-        <updatePolicy>always</updatePolicy>
-      </snapshots>
-    </repository>
-
-and declare the following dependency for the base library:
+Declare the following dependency for the jawampa-netty connection provider:
 
     <dependency>
         <groupId>ws.wamp.jawampa-netty</groupId>
         <artifactId>jawampa</artifactId>
         <version>0.4.0</version>
     </dependency>
+
+As this will automatically add a dependency on `ws.wamp.jawampa.core` is it
+sufficient to only add this single dependency.
 
 
 Client configuration

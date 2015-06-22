@@ -20,26 +20,22 @@ jawampa
 - is compatible with Java6. However the examples in this document use Java8
   syntax for convenience.
 
+
 Install
 -------
-Add the following repository to your pom.xml:
 
-    <repository>
-      <id>jawampa.mvn-repo</id>
-      <url>https://raw.github.com/Matthias247/jawampa/mvn-repo/</url>
-      <snapshots>
-        <enabled>true</enabled>
-        <updatePolicy>always</updatePolicy>
-      </snapshots>
-    </repository>
-
-and declare the following dependency for the base library:
+Declare the following dependency for the base library:
 
     <dependency>
-        <groupId>ws.wamp.jawampa</groupId>
+        <groupId>ws.wamp.jawampa-core</groupId>
         <artifactId>jawampa</artifactId>
         <version>0.4.0</version>
     </dependency>
+
+However as the core library of jawampa does not provide a transport layer users
+should typically use a jawampa transport provider library (e.g.
+`jawampa-netty` - see subdirectory) as a depency.  
+This will automatically also add a dependency on `jawampa-core`.
 
 
 WAMP client API (`WampClient`)
