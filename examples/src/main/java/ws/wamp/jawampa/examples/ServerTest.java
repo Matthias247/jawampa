@@ -220,7 +220,7 @@ public class ServerTest {
         
         waitUntilKeypressed();
         System.out.println("Closing router");
-        router.close().toBlocking().last();;
+        router.close().toBlocking().last();
         server.stop();
         
         waitUntilKeypressed();

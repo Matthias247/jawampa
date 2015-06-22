@@ -6,8 +6,9 @@ jawampa
 - provides WAMPv2 client side functionality as well as server side
   functionality and supports all currently defined WAMPv2 roles
   (caller, callee, publisher, subscriber, broker, dealer).
-- uses the [**Netty**](http://www.netty.io) framework as a transport layer for fast
-  and reliable communication.
+- provides a pluggable transport layer. Connection providers and servers
+  which use different networking mechanisms and low-level libraries can be
+  built and plugged into jawampa.
 - exposes the client-side user-interface through
   [**RxJava**](https://github.com/ReactiveX/RxJava) Observables, which enable
   powerful compositions of different asynchronous operations and provide an
@@ -48,7 +49,11 @@ The client-side API is exposed through the `WampClient` object.
 `WampClient`s must be created through `WampClientBuilder` objects, which allow
 to configure the created clients.
 
-There are 2 mandatory parameters that have to be set through the builder:
+There are 3 mandatory parameters that have to be set through the builder:
+- A connector provider which describes the framework which will be used for
+  establishing a connection to the WAMP router. An example is the
+  `NettyWampClientConnectorProvider` which is described in the documentation
+  of the jawampa-netty subproject.
 - The URI that describes the address of the WAMP router
 - The realm that the client should join on the router
 
@@ -64,7 +69,8 @@ final WampClient client;
 try {
     // Create a builder and configure the client
     WampClientBuilder builder = new WampClientBuilder();
-    builder.withUri("ws://localhost:8080/wamprouter")
+    builder.withConnectorProvider(connectorProvider)
+           .withUri("ws://localhost:8080/wamprouter")
            .withRealm("examplerealm")
            .withInfiniteReconnects()
            .withReconnectInterval(5, TimeUnit.SECONDS);
@@ -123,16 +129,25 @@ all reconnect attempts. After a `WampClient` was closed it can not be reopened
 again. Instead of this a new instance of the `WampClient` should be created if
 necessary.
 
+The close process is also asynchronous. Therefore a call to `close()` does not
+guarantee an immediate close of the client. However the `close()` call returns
+an `Observable` which can be used to wait until the client was successfully
+closed. 
+
 **Example for a typical session lifecycle:**
 
 ~~~~java
 WampClient client = builder.build();
 client.statusChanged().subscribe(...);
 client.open();
+
 // ...
 // use the client here
 // ...
-client.close();
+
+// Wait synchronously for the client to close
+// On environments like UI thread asynchronous waiting should be preferred
+client.close().toBlocking().last();
 ~~~~
 
 ### Performing procedure procedure calls
@@ -352,10 +367,62 @@ try {
 The router will be directly up-and-running after it was built. However it won't
 listen to any connections yet and therefore won't do anything up to this point.
 
+In order for the router to work servers must be set up that accept connections,
+register them at the `WampRouter` and then push messages towards it.
+
+The `WampRouter` provides an implementation of the `IWampConnectionAcceptor`
+interface which can be used to register a new connection at the client. It can
+be queried through the `WampRouter.connectionAcceptor()` getter.  
+
+Registering a new connection at the router is a 2-stage process:
+
+- At first the connection provider must query an instance of a
+  `IWampConnectionListener` from the router by calling 
+  `connectionAcceptor.createNewConnectionListener();`. This will be the
+  interface to which the new connection should push messages after it was
+  fully established and registered.  
+  The returned interface does not yet occupy any non-garbage-collectible
+  resources in the router. Therefore it is not harmful to ignore the return
+  value if the connection provider determines that the connection can not be
+  properly established.
+- In a second step the new connection must be registered at the router by
+  calling
+  `connectionAcceptor.acceptNewConnection(connection, connectionListener);`
+  and thereby providing the sending interface of type `IWampConnection` to the
+  router.
+
+The new connection may only send message to the listener once both steps have
+been finished. Sending messages earlier causes undefined behavior.
+
+The `WampRouter` will use the provided `IWampConnection` interface in order to
+send messages through connections. The connection must guarantee the following
+contract to the router:
+
+- The router must be able to call methods on the interface as long as it has
+  not called `close(...)` on it.  
+  If the connection is already closed or in an errorenous state implementations
+  of the interface should answer `sendMessage(...)` calls by rejecting the
+  provided promise.
+- The router will always call `close(...)` on the interface, even if the
+  connection was closed by the remote side before.
+- The connection must guarantee that it calls no method on the retrieved
+  `IWampConnectionListener` interface after it has acknowledged the close call
+  by fulfilling the provided future. The router will take the acknowledgement
+  of the `close(...)` call as a sign that all resources owned by the connection
+  have been released.
+
+
+An example implementation of a server that pushes messages towards the router
+which is based on the Netty framework can be found in the jawampa-netty
+subproject.
+
+
+### Closing a router
+
 To close a router the `close()` member function has to be called:
 
 ~~~~java
-router.close();
+router.close.toBlocking().last();
 ~~~~
 
 This will gracefully close all WAMP sessions established between the router and
@@ -363,81 +430,14 @@ clients and will also close the underlying transport channels. If new
 connections are made to the router after `close()` it will reject those by
 closing them.
 
+Just like the `close()` call on the `WampClient` closing a `WampRouter` is also
+an asnychronous process and the the call will return an `Observable` that
+signals when the router is fully shutdown.
 
 In order to allow the router to listen on a port, accept incoming connections
-one or more Netty servers have to be started which use the router as their final
+one or more servers have to be started which use the router as their final
 request handler.
 
-### Netty HTTP / WebSocket server integration
-
-In order to connect a `WampRouter` to a WebSocket server **jawampa** provides a
-custom Netty `ChannelHandler` that performs this job:
-The `WampServerWebsocketHandler`  
-This handler can be integrated into the users HTTP pipeline and allows to expose
-the WAMP router functionality under a chosen path like `/wamp`.
-The handler has to be inserted above the basic HTTP handlers like
-`HttpServerCodec` and `HttpObjectAggregator` (because it
-expects to read an HTTP upgrade request) but below the users handlers which
-might service HTTP requests to other pathes or provide other websocket on other
-pathes.  
-If the `WampServerWebsocketHandler` encounters a websocket upgrade request that
-targets the configured WAMP router path it will restructure the pipeline:  
-All handlers including and above the `WampServerWebsocketHandler` will be
-removed and other handlers that are required to provide WAMP functionality will
-be inserted instead. These will transform WebSocket frames into WAMP messages
-and forward them to the `WampRouter`.
-
-The pipeline transformation will look like:
-
-~~~~
-
- +---------------------------+            +---------------------------+
- |     User HTTPhandler      |            |        WAMP Router        |
- +------------++-------------+            +-------------++------------+
-              ||                                        ||
- +------------++-------------+            +-------------++------------+
- | WampServerWebsocketHandler|            |     WAMP Deserializer     |
- +------------++-------------+            +-------------++------------+
-              ||                                        ||
- +------------++-------------+            +-------------++------------+
- | WampServerWebsocketHandler|  ------->  |     WAMP Serializer       |
- +------------++-------------+            +-------------++------------+
-              ||                                        ||
- +------------++-------------+            +-------------++------------+
- |   HttpObjectAggregator    |            |     WebSocket Decoder     |
- +------------++-------------+            +-------------++------------+
-              ||                                        ||
- +------------++-------------+            +-------------++------------+
- |     HttpServerCodec       |            |     WebSocket Encoder     |
- +---------------------------+            +---------------------------+
-
-~~~~
-
-For use cases where the user does only want to quickly startup a WAMP router
-without the need for exposing other HTTP and websocket functionality in parallel
-a simply default implementation for a Netty websocket server is included, which
-implements a standard HTTP pipeline that exposes the WAMP router on one path
-and provides only a simply index.html page in parallel.
-This implementation is available through the `SimpleWampWebsocketListener` class
-.
-
-With this class a WAMP router that serves on all IPv4 interfaces on port 8080
-on path and provides WAMP routing functionality on path `/wamp` can be started
-as follows:
-
-~~~~java
-WampRouter router = new WampRouterBuilder().addRealm("realm1").build();
-SimpleWampWebsocketListener server =
-  new SimpleWampWebsocketListener(router, URI.create("ws://0.0.0.0:8080/wamp"), null);
-server.start();
-~~~~
-
-To shut down the server both the HTTP server/listener as well as the the WAMP
-router must be shut down:
-~~~~java
-server.stop();
-router.close();
-~~~~
 
 
 Restrictions
@@ -450,8 +450,8 @@ Therefore the following restrictions apply:
   required in the WAMP specification. **jawampa** will use Jackson to transform
   data from binary to JSON which will use a base64 encoding, but will not
   prepend the data with a leading 0 byte.
-- **jawampa** only supports the **WAMPv2** basic profile. Features defined in
-  the advanced profile are not supported.
+- **jawampa** only supports the **WAMPv2** basic profile and some selected parts
+  of the advanced profile. Many advanced profile features are not implemented.
 - **jawampa** only supports websocket connections between WAMP clients and
   routers.
 - The roles of the client and router are properly transmitted but not taken into
