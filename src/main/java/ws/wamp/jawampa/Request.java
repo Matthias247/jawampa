@@ -42,6 +42,7 @@ public class Request {
     final long requestId;
     final ArrayNode arguments;
     final ObjectNode keywordArguments;
+    final ObjectNode details;
     
     volatile int replySent = 0;
     
@@ -57,15 +58,20 @@ public class Request {
     public ObjectNode keywordArguments() {
         return keywordArguments;
     }
+    
+    public ObjectNode details() {
+    	return details;
+    }
 
     public Request(WampClient client, Channel channel, 
-                   long requestId, ArrayNode arguments, ObjectNode keywordArguments)
+                   long requestId, ArrayNode arguments, ObjectNode keywordArguments, ObjectNode details)
     {
         this.client = client;
         this.channel = channel;
         this.requestId = requestId;
         this.arguments = arguments;
         this.keywordArguments = keywordArguments;
+        this.details = details;
     }
     
     /**
