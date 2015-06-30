@@ -10,8 +10,8 @@ Install
 Declare the following dependency for the jawampa-netty connection provider:
 
     <dependency>
-        <groupId>ws.wamp.jawampa-netty</groupId>
-        <artifactId>jawampa</artifactId>
+        <groupId>ws.wamp.jawampa</groupId>
+        <artifactId>jawampa-netty</artifactId>
         <version>0.4.0</version>
     </dependency>
 
