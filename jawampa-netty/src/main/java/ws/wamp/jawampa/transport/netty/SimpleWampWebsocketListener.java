@@ -126,8 +126,6 @@ public class SimpleWampWebsocketListener {
         catch(Exception e) {
             throw new RuntimeException(e);
         }
-        finally {
-        }
     }
     
     public void stop() {
