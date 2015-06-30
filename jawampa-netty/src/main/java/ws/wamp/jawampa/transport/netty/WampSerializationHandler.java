@@ -62,7 +62,7 @@ public class WampSerializationHandler extends MessageToMessageEncoder<WampMessag
             objectMapper.writeValue(outStream, node);
 
             if (logger.isDebugEnabled()) {
-                logger.debug("Serialized Wamp Message: {}", objectMapper.writeValueAsString(node));
+                logger.debug("Serialized Wamp Message: {}", node.toString());
             }
 
         } catch (Exception e) {
