@@ -105,7 +105,7 @@ public class NettyWampClientConnectorProvider implements IWampConnectorProvider 
             // Initialize SSL when required
             final boolean needSsl = uri.getScheme().equalsIgnoreCase("wss");
             final SslContext sslCtx0;
-            if (needSsl && nettyConfig.sslContext() == null) {
+            if (needSsl && (nettyConfig == null || nettyConfig.sslContext() == null)) {
                 // Create a default SslContext when we got none provided through the constructor
                 try {
                     sslCtx0 = SslContext.newClientContext(InsecureTrustManagerFactory.INSTANCE);
