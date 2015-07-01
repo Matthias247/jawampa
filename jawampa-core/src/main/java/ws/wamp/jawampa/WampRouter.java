@@ -72,7 +72,7 @@ public class WampRouter {
     /** Represents a realm that is exposed through the router */
     static class Realm {
         final RealmConfig config;
-        final List<ClientHandler> channels = new ArrayList<ClientHandler>();
+        final Map<Long, ClientHandler> channelsBySessionId = new HashMap<Long, ClientHandler>();
         final Map<String, Procedure> procedures = new HashMap<String, Procedure>();
         
         // Fields that are used for implementing subscription functionality
@@ -89,10 +89,10 @@ public class WampRouter {
         }
         
         void includeChannel(ClientHandler channel, long sessionId, Set<WampRoles> roles) {
-            channels.add(channel);
             channel.realm = this;
             channel.sessionId = sessionId;
             channel.roles = roles;
+            channelsBySessionId.put(sessionId, channel);
         }
         
         void removeChannel(ClientHandler channel, boolean removeFromList) {
@@ -130,15 +130,14 @@ public class WampRouter {
                 channel.providedProcedures = null;
                 channel.pendingInvocations = null;
             }
-            
+
+            if (removeFromList) {
+                channelsBySessionId.remove(channel.sessionId);
+            }
             channel.realm = null;
             channel.roles.clear();
             channel.roles = null;
             channel.sessionId = 0;
-            
-            if (removeFromList) {
-                channels.remove(channel);
-            }
         }
     }
     
@@ -296,14 +295,14 @@ public class WampRouter {
                 idleChannels.clear();
                 
                 for (Realm ri : realms.values()) {
-                    for (ClientHandler channel : ri.channels) {
+                    for (ClientHandler channel : ri.channelsBySessionId.values()) {
                         ri.removeChannel(channel, false);
                         channel.markAsClosed();
                         GoodbyeMessage goodbye = new GoodbyeMessage(null, ApplicationError.SYSTEM_SHUTDOWN);
                         channel.controller.sendMessage(goodbye, IWampConnectionPromise.Empty);
                         closeConnection(channel.controller, true);
                     }
-                    ri.channels.clear();
+                    ri.channelsBySessionId.clear();
                 }
                 
                 // close is asynchronous. It will wait until all connections are closed
@@ -916,9 +915,8 @@ public class WampRouter {
             return;
         }
         
-        long sessionId = IdGenerator.newRandomId(null);
-        // TODO: Should be unique on the router and should be stored somewhere
-        
+        long sessionId = IdGenerator.newRandomId(realm.channelsBySessionId);
+
         // Include the channel into the realm
         realm.includeChannel(channelHandler, sessionId, roles);
         // Remove the channel from the idle channel list - It is no longer idle
