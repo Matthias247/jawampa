@@ -72,6 +72,7 @@ public class WampRouter {
     /** Represents a realm that is exposed through the router */
     static class Realm {
         final RealmConfig config;
+        final ObjectNode welcomeDetails;
         final Map<Long, ClientHandler> channelsBySessionId = new HashMap<Long, ClientHandler>();
         final Map<String, Procedure> procedures = new HashMap<String, Procedure>();
         
@@ -86,6 +87,22 @@ public class WampRouter {
             subscriptionsByFlags.put(SubscriptionFlags.Exact, new HashMap<String, Subscription>());
             subscriptionsByFlags.put(SubscriptionFlags.Prefix, new HashMap<String, Subscription>());
             subscriptionsByFlags.put(SubscriptionFlags.Wildcard, new HashMap<String, Subscription>());
+
+            // Expose the roles that are configured for the realm
+            ObjectMapper objectMapper = new ObjectMapper();
+            welcomeDetails = objectMapper.createObjectNode();
+            welcomeDetails.put("agent", Version.getVersion());
+            ObjectNode routerRoles = welcomeDetails.putObject("roles");
+            for (WampRoles role : config.roles) {
+                ObjectNode roleNode = routerRoles.putObject(role.toString());
+                if (role == WampRoles.Publisher) {
+                    ObjectNode featuresNode = roleNode.putObject("features");
+                    featuresNode.put("publisher_exclusion", true);
+                } else if (role == WampRoles.Subscriber) {
+                    ObjectNode featuresNode = roleNode.putObject("features");
+                    featuresNode.put("pattern_based_subscription", true);
+                }
+            }
         }
         
         void includeChannel(ClientHandler channel, long sessionId, Set<WampRoles> roles) {
@@ -921,24 +938,9 @@ public class WampRouter {
         realm.includeChannel(channelHandler, sessionId, roles);
         // Remove the channel from the idle channel list - It is no longer idle
         idleChannels.remove(channelHandler.controller);
-        
-        // Expose the roles that are configured for the realm
-        ObjectNode welcomeDetails = objectMapper.createObjectNode();
-        welcomeDetails.put("agent", Version.getVersion());
-        ObjectNode routerRoles = welcomeDetails.putObject("roles");
-        for (WampRoles role : realm.config.roles) {
-            ObjectNode roleNode = routerRoles.putObject(role.toString());
-            if (role == WampRoles.Publisher) {
-                ObjectNode featuresNode = roleNode.putObject("features");
-                featuresNode.put("publisher_exclusion", true);
-            } else if (role == WampRoles.Subscriber) {
-                ObjectNode featuresNode = roleNode.putObject("features");
-                featuresNode.put("pattern_based_subscription", true);
-            }
-        }
-        
+
         // Respond with the WELCOME message
-        WelcomeMessage welcome = new WelcomeMessage(channelHandler.sessionId, welcomeDetails);
+        WelcomeMessage welcome = new WelcomeMessage(channelHandler.sessionId, realm.welcomeDetails);
         channelHandler.controller.sendMessage(welcome, IWampConnectionPromise.Empty);
     }
     

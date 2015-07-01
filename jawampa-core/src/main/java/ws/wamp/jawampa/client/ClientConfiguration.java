@@ -22,10 +22,13 @@ import java.util.List;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import ws.wamp.jawampa.WampRoles;
 import ws.wamp.jawampa.auth.client.ClientSideAuthentication;
 import ws.wamp.jawampa.connection.IWampConnector;
 import ws.wamp.jawampa.connection.IWampConnectorProvider;
+import ws.wamp.jawampa.internal.Version;
 
 /**
  * Stores various configuration data for WAMP clients
@@ -51,6 +54,8 @@ public class ClientConfiguration {
     final IWampConnectorProvider connectorProvider;
     /** The connector which is used to create new connections to the remote peer */
     final IWampConnector connector;
+
+    final ObjectNode helloDetails;
     
     public ClientConfiguration(
         boolean closeClientOnErrors,
@@ -82,6 +87,36 @@ public class ClientConfiguration {
         
         this.connectorProvider = connectorProvider;
         this.connector = connector;
+
+        // Put the requested roles in the Hello message
+        helloDetails = objectMapper.createObjectNode();
+        helloDetails.put("agent", Version.getVersion());
+
+        ObjectNode rolesNode = helloDetails.putObject("roles");
+        for (WampRoles role : clientRoles) {
+            ObjectNode roleNode = rolesNode.putObject(role.toString());
+            if (role == WampRoles.Publisher ) {
+                ObjectNode featuresNode = roleNode.putObject("features");
+                featuresNode.put("publisher_exclusion", true);
+            } else if (role == WampRoles.Subscriber) {
+                ObjectNode featuresNode = roleNode.putObject("features");
+                featuresNode.put("pattern_based_subscription", true);
+            } else if (role == WampRoles.Caller) {
+                ObjectNode featuresNode = roleNode.putObject("features");
+                featuresNode.put("caller_identification", true);
+            }
+        }
+
+        // Insert authentication data
+        if(authId != null) {
+            helloDetails.put("authid", authId);
+        }
+        if (authMethods != null && authMethods.size() != 0) {
+            ArrayNode authMethodsNode = helloDetails.putArray("authmethods");
+            for(ClientSideAuthentication authMethod : authMethods) {
+                authMethodsNode.add(authMethod.getAuthMethod());
+            }
+        }
     }
     
     public boolean closeClientOnErrors() {
@@ -127,5 +162,9 @@ public class ClientConfiguration {
     
     public List<ClientSideAuthentication> authMethods() {
         return new ArrayList<ClientSideAuthentication>(authMethods);
+    }
+
+    ObjectNode helloDetails(){
+        return helloDetails;
     }
 }
