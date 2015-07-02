@@ -32,10 +32,8 @@ import ws.wamp.jawampa.WampMessages.WelcomeMessage;
 import ws.wamp.jawampa.auth.client.ClientSideAuthentication;
 import ws.wamp.jawampa.connection.IConnectionController;
 import ws.wamp.jawampa.connection.IWampConnectionPromise;
-import ws.wamp.jawampa.internal.Version;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 /**
@@ -123,40 +121,8 @@ public class HandshakingState implements ClientState {
         // Connection to the remote host was established
         // However the WAMP session is not established until the handshake was finished
         
-        // Put the requested roles in the Hello message
-        ObjectNode o = stateController.clientConfig().objectMapper().createObjectNode();
-        o.put("agent", Version.getVersion());
-        
-        ObjectNode rolesNode = o.putObject("roles");
-        for (WampRoles role : stateController.clientConfig().clientRoles()) {
-            ObjectNode roleNode = rolesNode.putObject(role.toString());
-            if (role == WampRoles.Publisher ) {
-                ObjectNode featuresNode = roleNode.putObject("features");
-                featuresNode.put("publisher_exclusion", true);
-            } else if (role == WampRoles.Subscriber) {
-                ObjectNode featuresNode = roleNode.putObject("features");
-                featuresNode.put("pattern_based_subscription", true);
-            } else if (role == WampRoles.Caller) {
-                ObjectNode featuresNode = roleNode.putObject("features");
-                featuresNode.put("caller_identification", true);
-            }
-        }
-        
-        // Insert authentication data
-        String authId = stateController.clientConfig().authId();
-        List<ClientSideAuthentication> authMethods = stateController.clientConfig().authMethods();
-        if(authId != null) {
-            o.put("authid", authId);
-        }
-        if (authMethods != null && authMethods.size() != 0) {
-            ArrayNode authMethodsNode = o.putArray("authmethods");
-            for(ClientSideAuthentication authMethod : authMethods) {
-                authMethodsNode.add(authMethod.getAuthMethod());
-            }
-        }
-        
         connectionController
-        .sendMessage(new WampMessages.HelloMessage(stateController.clientConfig().realm(), o), IWampConnectionPromise.Empty);
+        .sendMessage(new WampMessages.HelloMessage(stateController.clientConfig().realm(), stateController.clientConfig().helloDetails()), IWampConnectionPromise.Empty);
     }
     
     void onMessage(WampMessage msg) {
