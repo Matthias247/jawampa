@@ -590,7 +590,7 @@ public class SessionEstablishedState implements ClientState {
                 // Add the cancellation functionality only if we are
                 // already subscribed. If not then this will be added
                 // once subscription is completed
-                attachPubSubCancelationAction(subscriber, entry, topic);
+                attachPubSubCancellationAction(subscriber, entry, topic);
             }
         }
         else { // need to subscribe
@@ -626,7 +626,7 @@ public class SessionEstablishedState implements ClientState {
                     // If one is already unsubscribed this will immediately call
                     // the cancellation function for this subscriber
                     for (Subscriber<? super PubSubData> s : newEntry.subscribers) {
-                        attachPubSubCancelationAction(s, newEntry, topic);
+                        attachPubSubCancellationAction(s, newEntry, topic);
                     }
                 }
             }, new Action1<Throwable>() {
@@ -666,9 +666,9 @@ public class SessionEstablishedState implements ClientState {
      * if unsubscribe is called. This action will lead to the unsubscription at the
      * broker once the topic subscription at the broker is no longer used by anyone.
      */
-    private void attachPubSubCancelationAction(final Subscriber<? super PubSubData> subscriber, 
-                                               final SubscriptionMapEntry mapEntry,
-                                               final String topic)
+    private void attachPubSubCancellationAction(final Subscriber<? super PubSubData> subscriber,
+                                                final SubscriptionMapEntry mapEntry,
+                                                final String topic)
     {
         subscriber.add(Subscriptions.create(new Action0() {
             @Override
