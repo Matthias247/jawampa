@@ -50,6 +50,9 @@ public class NettyWampConnectionConfig implements IWampClientConnectionConfig {
         }
 
         public Builder withMaxFramePayloadLength(int maxFramePayloadLength){
+            if ( maxFramePayloadLength < 0 ){
+                throw new IllegalArgumentException("maxFramePayloadLength parameter cannot be negative");
+            }
             this.maxFramePayloadLength = maxFramePayloadLength;
             return this;
         }
