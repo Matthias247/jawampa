@@ -120,7 +120,9 @@ public class NettyWampClientConnectorProvider implements IWampConnectorProvider 
             }
             
             final String subProtocols = WampSerialization.makeWebsocketSubprotocolList(serializations);
-            
+
+            final int maxFramePayloadLength = (nettyConfig == null )? NettyWampConnectionConfig.DEFAULT_MAX_FRAME_PAYLOAD_LENGTH : nettyConfig.getMaxFramePayloadLength();
+
             // Return a factory that creates a channel for websocket connections
             return new IWampConnector() {
                 @Override
@@ -137,7 +139,7 @@ public class NettyWampClientConnectorProvider implements IWampConnectorProvider 
                     
                     final WebSocketClientHandshaker handshaker = WebSocketClientHandshakerFactory.newHandshaker(
                         uri, WebSocketVersion.V13, subProtocols,
-                        false, new DefaultHttpHeaders());
+                        false, new DefaultHttpHeaders(), maxFramePayloadLength);
                     
                     /**
                      * Netty handler for that receives and processes WampMessages and state
@@ -262,7 +264,7 @@ public class NettyWampClientConnectorProvider implements IWampConnectorProvider 
                         protected void initChannel(SocketChannel ch) {
                         ChannelPipeline p = ch.pipeline();
                         if (sslCtx0 != null) {
-                            p.addLast(sslCtx0.newHandler(ch.alloc(), 
+                            p.addLast(sslCtx0.newHandler(ch.alloc(),
                                                          uri.getHost(),
                                                          port));
                         }
