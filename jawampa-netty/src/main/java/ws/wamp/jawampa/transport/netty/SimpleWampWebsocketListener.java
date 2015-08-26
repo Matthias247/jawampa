@@ -18,6 +18,8 @@ package ws.wamp.jawampa.transport.netty;
 
 import java.net.URI;
 import java.util.List;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import ws.wamp.jawampa.ApplicationError;
 import ws.wamp.jawampa.WampRouter;
@@ -89,8 +91,19 @@ public class SimpleWampWebsocketListener {
         if (serializations == null || serializations.size() == 0 || serializations.contains(WampSerialization.Invalid))
             throw new ApplicationError(ApplicationError.INVALID_SERIALIZATIONS);
 
-        this.bossGroup = new NioEventLoopGroup(1);
-        this.clientGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors());
+        this.bossGroup = new NioEventLoopGroup(1, new ThreadFactory(){
+            @Override
+            public Thread newThread(Runnable r){
+                return new Thread(r, "WampRouterBossLoop");
+            }
+        });
+        this.clientGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors(), new ThreadFactory(){
+            private AtomicInteger counter = new AtomicInteger();
+            @Override
+            public Thread newThread(Runnable r){
+                return new Thread(r, "WampRouterClientLoop-"+counter.incrementAndGet());
+            }
+        });
 
         // Copy the ssl context only when we really want ssl
         if (uri.getScheme().equalsIgnoreCase("wss")) {
