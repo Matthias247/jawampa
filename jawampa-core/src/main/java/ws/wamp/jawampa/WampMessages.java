@@ -186,6 +186,7 @@ public class WampMessages {
 
         public JsonNode toObjectArray(ObjectMapper mapper) throws WampError {
             ArrayNode messageNode = mapper.createArrayNode();
+            messageNode.add(ID);
             if (details != null)
                 messageNode.add(details);
             else
