@@ -20,6 +20,7 @@ import java.net.URI;
 import java.util.EnumSet;
 import java.util.Set;
 import java.util.concurrent.Future;
+
 import rx.Observable;
 import rx.Observable.OnSubscribe;
 import rx.Observer;
@@ -33,6 +34,7 @@ import ws.wamp.jawampa.client.StateController;
 import ws.wamp.jawampa.internal.ArgArrayBuilder;
 import ws.wamp.jawampa.internal.Promise;
 import ws.wamp.jawampa.internal.UriValidator;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -45,8 +47,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  * directly be instantiated.
  */
 public class WampClient {
-    
-    /** Base type for all possible client states */
+
+	/** Base type for all possible client states */
     public interface State {
     }
     
@@ -333,7 +335,7 @@ public class WampClient {
      * of the call be Observable&lt;String&gt;.
      * @return An observable that can be used to subscribe on the topic.
      */
-    public <T> Observable<T> makeSubscription(final String topic, final Class<T> eventClass) {
+    public <T> Observable<MessageInfo<T>> makeSubscription(final String topic, final Class<T> eventClass) {
         return makeSubscription(topic, SubscriptionFlags.Exact, eventClass);
     }
 
@@ -361,14 +363,20 @@ public class WampClient {
      * of the call be Observable&lt;String&gt;.
      * @return An observable that can be used to subscribe on the topic.
      */
-    public <T> Observable<T> makeSubscription(final String topic, SubscriptionFlags flags, final Class<T> eventClass)
+    public <T> Observable<MessageInfo<T>> makeSubscription(final String topic, SubscriptionFlags flags, final Class<T> eventClass)
     {
-        return makeSubscription(topic, flags).map(new Func1<PubSubData,T>() {
+        return makeSubscription(topic, flags).map(new Func1<PubSubData,MessageInfo<T>>() {
             @Override
-            public T call(PubSubData ev) {
+            public MessageInfo<T> call(PubSubData ev) {
                 if (eventClass == null || eventClass == Void.class) {
                     // We don't need a value
                     return null;
+                }
+                String actualTopic = null;
+               
+                if(ev.details !=null){
+                	actualTopic = ev.details.get("topic").asText();
+                	
                 }
 
                 if (ev.arguments == null || ev.arguments.size() < 1)
@@ -383,7 +391,7 @@ public class WampClient {
                 } catch (IllegalArgumentException e) {
                     throw OnErrorThrowable.from(new ApplicationError(ApplicationError.INVALID_VALUE_TYPE));
                 }
-                return eventValue;
+                return new MessageInfo<T>(eventValue, actualTopic);
             }
         });
     }
