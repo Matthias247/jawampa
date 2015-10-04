@@ -20,7 +20,6 @@ import java.net.URI;
 import java.util.EnumSet;
 import java.util.Set;
 import java.util.concurrent.Future;
-
 import rx.Observable;
 import rx.Observable.OnSubscribe;
 import rx.Observer;
@@ -34,7 +33,6 @@ import ws.wamp.jawampa.client.StateController;
 import ws.wamp.jawampa.internal.ArgArrayBuilder;
 import ws.wamp.jawampa.internal.Promise;
 import ws.wamp.jawampa.internal.UriValidator;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -47,8 +45,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  * directly be instantiated.
  */
 public class WampClient {
-
-	/** Base type for all possible client states */
+    
+    /** Base type for all possible client states */
     public interface State {
     }
     
@@ -335,7 +333,7 @@ public class WampClient {
      * of the call be Observable&lt;String&gt;.
      * @return An observable that can be used to subscribe on the topic.
      */
-    public <T> Observable<MessageInfo<T>> makeSubscription(final String topic, final Class<T> eventClass) {
+    public <T> Observable<T> makeSubscription(final String topic, final Class<T> eventClass) {
         return makeSubscription(topic, SubscriptionFlags.Exact, eventClass);
     }
 
@@ -363,20 +361,14 @@ public class WampClient {
      * of the call be Observable&lt;String&gt;.
      * @return An observable that can be used to subscribe on the topic.
      */
-    public <T> Observable<MessageInfo<T>> makeSubscription(final String topic, SubscriptionFlags flags, final Class<T> eventClass)
+    public <T> Observable<T> makeSubscription(final String topic, SubscriptionFlags flags, final Class<T> eventClass)
     {
-        return makeSubscription(topic, flags).map(new Func1<PubSubData,MessageInfo<T>>() {
+        return makeSubscription(topic, flags).map(new Func1<PubSubData,T>() {
             @Override
-            public MessageInfo<T> call(PubSubData ev) {
+            public T call(PubSubData ev) {
                 if (eventClass == null || eventClass == Void.class) {
                     // We don't need a value
                     return null;
-                }
-                String actualTopic = null;
-               
-                if(ev.details !=null){
-                	actualTopic = ev.details.get("topic").asText();
-                	
                 }
 
                 if (ev.arguments == null || ev.arguments.size() < 1)
@@ -391,7 +383,67 @@ public class WampClient {
                 } catch (IllegalArgumentException e) {
                     throw OnErrorThrowable.from(new ApplicationError(ApplicationError.INVALID_VALUE_TYPE));
                 }
-                return new MessageInfo<T>(eventValue, actualTopic);
+                return eventValue;
+            }
+        });
+    }
+    
+    /**
+     * Returns an observable that allows to subscribe on the given topic.<br>
+     * The actual subscription will only be made after subscribe() was called
+     * on it.<br>
+     * makeSubscriptionWithDetails will automatically transform the
+     * received events data into the type eventClass and will therefore return
+     * a mapped Observable of type EventDetails. It will only look at and transform the first
+     * argument of the received events arguments, therefore it can only be used
+     * for events that carry either a single or no argument.<br>
+     * Received publications will be pushed to the Subscriber via it's
+     * onNext method.<br>
+     * The client can unsubscribe from the topic by calling unsubscribe() on
+     * it's Subscription.<br>
+     * If the connection closes onCompleted will be called.<br>
+     * In case of errors during subscription onError will be called.
+     * @param topic The topic to subscribe on.<br>
+     * Must be valid WAMP URI.
+     * @param flags Flags to indicate type of subscription. This cannot be null.
+     * @param eventClass The class type into which the received event argument
+     * should be transformed. E.g. use String.class to let the client try to
+     * transform the first argument into a String and let the return value of
+     * of the call be Observable&lt;EventDetails&lt;String&gt;&gt;.
+     * @return An observable of type EventDetails that can be used to subscribe on the topic.
+     * EventDetails contains topic and message. EventDetails.topic can be useful in getting 
+     * the complete topic name during wild card or prefix subscriptions 
+     */
+    public <T> Observable<EventDetails<T>> makeSubscriptionWithDetails(final String topic, SubscriptionFlags flags, final Class<T> eventClass)
+    {
+        return makeSubscription(topic, flags).map(new Func1<PubSubData,EventDetails<T>>() {
+            @Override
+            public EventDetails<T> call(PubSubData ev) {
+                if (eventClass == null || eventClass == Void.class) {
+                    // We don't need a value
+                    return null;
+                }
+                
+                //get the complete topic name 
+                //which may not be the same as method parameter 'topic' during wildcard or prefix subscriptions 
+                String actualTopic = null;
+                if(ev.details != null && ev.details.get("topic") != null){
+                	actualTopic = ev.details.get("topic").asText();
+                }
+
+                if (ev.arguments == null || ev.arguments.size() < 1)
+                    throw OnErrorThrowable.from(new ApplicationError(ApplicationError.MISSING_VALUE));
+
+                JsonNode eventNode = ev.arguments.get(0);
+                if (eventNode.isNull()) return null;
+
+                T eventValue;
+                try {
+                    eventValue = clientConfig.objectMapper().convertValue(eventNode, eventClass);
+                } catch (IllegalArgumentException e) {
+                    throw OnErrorThrowable.from(new ApplicationError(ApplicationError.INVALID_VALUE_TYPE));
+                }
+                return new EventDetails<T>(eventValue, actualTopic);
             }
         });
     }
