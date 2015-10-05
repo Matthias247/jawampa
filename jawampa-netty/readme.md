@@ -12,7 +12,7 @@ Declare the following dependency for the jawampa-netty connection provider:
     <dependency>
         <groupId>ws.wamp.jawampa</groupId>
         <artifactId>jawampa-netty</artifactId>
-        <version>0.4.0</version>
+        <version>0.4.1</version>
     </dependency>
 
 As this will automatically add a dependency on `ws.wamp.jawampa.core` is it

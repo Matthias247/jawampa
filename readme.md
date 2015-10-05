@@ -29,7 +29,7 @@ Declare the following dependency for the base library:
     <dependency>
         <groupId>ws.wamp.jawampa</groupId>
         <artifactId>jawampa-core</artifactId>
-        <version>0.4.0</version>
+        <version>0.4.1</version>
     </dependency>
 
 However as the core library of jawampa does not provide a transport layer users
