@@ -46,7 +46,7 @@ public class StateController {
     
     public StateController(ClientConfiguration clientConfig) {
         this.clientConfig = clientConfig;
-        this.scheduler = clientConfig.connectorProvider.createScheduler();
+        this.scheduler = clientConfig.connectorProvider().createScheduler();
         this.rxScheduler = Schedulers.from(scheduler);
     }
     

@@ -183,7 +183,7 @@ public class SessionEstablishedState implements ClientState {
         
         stateController.setExternalState(new WampClient.DisconnectedState(disconnectReason));
         
-        int nrReconnectAttempts = reconnectAllowed ? stateController.clientConfig().totalNrReconnects : 0;
+        int nrReconnectAttempts = reconnectAllowed ? stateController.clientConfig().totalNrReconnects() : 0;
         if (nrReconnectAttempts != 0) {
             stateController.setExternalState(new WampClient.ConnectingState());
         }

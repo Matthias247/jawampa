@@ -16,6 +16,8 @@
 
 package ws.wamp.jawampa;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -37,20 +39,22 @@ import ws.wamp.jawampa.internal.UriValidator;
  */
 public class WampClientBuilder {
     
-    String uri;
-    String realm;
+    private String uri;
+    private String realm;
     
-    int nrReconnects = 0;
-    int reconnectInterval = DEFAULT_RECONNECT_INTERVAL;
-    boolean useStrictUriValidation = false;
-    boolean closeOnErrors = true;
-    EnumSet<WampRoles> roles;
-    List<WampSerialization> serializations = new ArrayList<WampSerialization>();
-    String authId = null;
-    List<ClientSideAuthentication> authMethods = new ArrayList<ClientSideAuthentication>();
-    
-    IWampClientConnectionConfig connectionConfiguration = null;
-    IWampConnectorProvider connectorProvider = null;
+    private int nrReconnects = 0;
+    private int reconnectInterval = DEFAULT_RECONNECT_INTERVAL;
+    private boolean useStrictUriValidation = false;
+    private boolean closeOnErrors = true;
+    private EnumSet<WampRoles> roles;
+    private List<WampSerialization> serializations = new ArrayList<WampSerialization>();
+    private String authId = null;
+    private List<ClientSideAuthentication> authMethods = new ArrayList<ClientSideAuthentication>();
+
+    private IWampClientConnectionConfig connectionConfiguration = null;
+    private IWampConnectorProvider connectorProvider = null;
+
+    private ObjectMapper objectMapper = null;
     
     /** The default reconnect interval in milliseconds.<br>This is set to 5s */
     public static final int DEFAULT_RECONNECT_INTERVAL = 5000;
@@ -122,12 +126,16 @@ public class WampClientBuilder {
         // This can throw!
         IWampConnector connector =
             connectorProvider.createConnector(routerUri, connectionConfiguration, serializations);
+
+        // Use default object mapper
+        if (objectMapper == null)
+            objectMapper = new ObjectMapper();
         
         ClientConfiguration clientConfig =
             new ClientConfiguration(
                 closeOnErrors, authId, authMethods, routerUri, realm,
                 useStrictUriValidation, rolesArray, nrReconnects, reconnectInterval,
-                connectorProvider, connector);
+                connectorProvider, connector, objectMapper);
         
         return new WampClient(clientConfig);
     }
@@ -174,7 +182,7 @@ public class WampClientBuilder {
      * establish connections to the server.<br>
      * By using a different ConnectorProvider a different transport framework can be used
      * for data exchange between client and server.
-     * @param The {@link IWampConnectorProvider} that should be used
+     * @param provider The {@link IWampConnectorProvider} that should be used
      * @return The {@link WampClientBuilder} object
      */
     public WampClientBuilder withConnectorProvider(IWampConnectorProvider provider) {
@@ -186,7 +194,7 @@ public class WampClientBuilder {
      * Assigns additional configuration data for a connection that should be used.<br>
      * The type of this configuration data depends on the used {@link IWampConnectorProvider}.<br>
      * Depending on the provider this might be null or not.
-     * @param The {@link IWampClientConnectionConfig} that should be used
+     * @param configuration The {@link IWampClientConnectionConfig} that should be used
      * @return The {@link WampClientBuilder} object
      */
     public WampClientBuilder withConnectionConfiguration(IWampClientConnectionConfig configuration) {
@@ -308,5 +316,17 @@ public class WampClientBuilder {
        this.authMethods.add( authMethod );
        return this;
    }
+
+  /**
+   * Set custom, pre-configured {@link ObjectMapper}.
+   * This instance will be used instead of default for serialization and deserialization.
+   * @param objectMapper The {@link ObjectMapper} instance
+   * @return The {@link WampClientBuilder} object
+   */
+    public WampClientBuilder withObjectMapper(ObjectMapper objectMapper)
+    {
+        this.objectMapper = objectMapper;
+        return this;
+    }
 
 }
