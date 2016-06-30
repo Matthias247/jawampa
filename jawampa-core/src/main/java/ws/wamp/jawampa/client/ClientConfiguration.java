@@ -34,28 +34,28 @@ import ws.wamp.jawampa.internal.Version;
  * Stores various configuration data for WAMP clients
  */
 public class ClientConfiguration {
-    final boolean closeClientOnErrors;
+    private final boolean closeClientOnErrors;
     
-    final String authId;
-    final List<ClientSideAuthentication> authMethods;
+    private final String authId;
+    private final List<ClientSideAuthentication> authMethods;
     
-    final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
-    final URI routerUri;
-    final String realm;
-    final boolean useStrictUriValidation;
+    private final URI routerUri;
+    private final String realm;
+    private final boolean useStrictUriValidation;
     
-    final WampRoles[] clientRoles;
+    private final WampRoles[] clientRoles;
     
-    final int totalNrReconnects;
-    final int reconnectInterval;
+    private final int totalNrReconnects;
+    private final int reconnectInterval;
     
     /** The provider that should be used to obtain a connector */
-    final IWampConnectorProvider connectorProvider;
+    private final IWampConnectorProvider connectorProvider;
     /** The connector which is used to create new connections to the remote peer */
-    final IWampConnector connector;
+    private final IWampConnector connector;
 
-    final ObjectNode helloDetails;
+    private final ObjectNode helloDetails;
     
     public ClientConfiguration(
         boolean closeClientOnErrors,
@@ -68,7 +68,7 @@ public class ClientConfiguration {
         int totalNrReconnects,
         int reconnectInterval,
         IWampConnectorProvider connectorProvider,
-        IWampConnector connector)
+        IWampConnector connector, ObjectMapper objectMapper)
     {
         this.closeClientOnErrors = closeClientOnErrors;
         
@@ -87,9 +87,10 @@ public class ClientConfiguration {
         
         this.connectorProvider = connectorProvider;
         this.connector = connector;
+        this.objectMapper = objectMapper;
 
         // Put the requested roles in the Hello message
-        helloDetails = objectMapper.createObjectNode();
+        helloDetails = this.objectMapper.createObjectNode();
         helloDetails.put("agent", Version.getVersion());
 
         ObjectNode rolesNode = helloDetails.putObject("roles");
@@ -162,6 +163,10 @@ public class ClientConfiguration {
     
     public List<ClientSideAuthentication> authMethods() {
         return new ArrayList<ClientSideAuthentication>(authMethods);
+    }
+
+    public IWampConnectorProvider connectorProvider() {
+        return connectorProvider;
     }
 
     ObjectNode helloDetails(){
