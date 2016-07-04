@@ -4,7 +4,7 @@
     <packaging>pom</packaging>
     <groupId>ws.wamp.jawampa</groupId>
     <artifactId>jawampa-parent</artifactId>
-    <version>0.4.2</version>
+    <version>0.4.3-STAGING</version>
   
     <name>jawampa</name>
     <url>https://github.com/Matthias247/jawampa</url>
