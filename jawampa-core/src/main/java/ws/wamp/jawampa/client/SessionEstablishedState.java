@@ -32,6 +32,7 @@ import ws.wamp.jawampa.ApplicationError;
 import ws.wamp.jawampa.CallFlags;
 import ws.wamp.jawampa.PubSubData;
 import ws.wamp.jawampa.PublishFlags;
+import ws.wamp.jawampa.RegisterFlags;
 import ws.wamp.jawampa.Reply;
 import ws.wamp.jawampa.Request;
 import ws.wamp.jawampa.SubscriptionFlags;
@@ -468,7 +469,8 @@ public class SessionEstablishedState implements ClientState {
         connectionController.sendMessage(callMsg, IWampConnectionPromise.Empty);
     }
     
-    public void performRegisterProcedure(final String topic, final Subscriber<? super Request> subscriber) {
+    public void performRegisterProcedure(final String topic, final EnumSet<RegisterFlags> flags,
+            final Subscriber<? super Request> subscriber) {
         // Check if we have already registered a function with the same name
         final RegisteredProceduresMapEntry entry = registeredProceduresByUri.get(topic);
         if (entry != null) {
@@ -485,7 +487,13 @@ public class SessionEstablishedState implements ClientState {
         // Make the subscribe call
         final long requestId = IdGenerator.newLinearId(lastRequestId, requestMap);
         lastRequestId = requestId;
-        final RegisterMessage msg = new RegisterMessage(requestId, null, topic);
+
+        ObjectNode options = stateController.clientConfig().objectMapper().createObjectNode();
+        if (flags != null && flags.contains(RegisterFlags.DiscloseCaller)) {
+            options.put("disclose_caller", true);
+        }
+
+        final RegisterMessage msg = new RegisterMessage(requestId, options, topic);
 
         final AsyncSubject<Long> registerFuture = AsyncSubject.create();
         registerFuture
