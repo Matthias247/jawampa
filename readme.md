@@ -146,7 +146,7 @@ client.open();
 client.close().toBlocking().last();
 ~~~~
 
-### Performing procedure procedure calls
+### Performing procedure calls
 
 Remote procedure calls can be performed through the various `call` member
 functions of the `WampClient`.
