@@ -17,6 +17,7 @@
 package ws.wamp.jawampa;
 
 import java.net.URI;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.Set;
 import java.util.concurrent.Future;
@@ -280,6 +281,50 @@ public class WampClient {
      * @return An observable that can be used to provide a procedure.
      */
     public Observable<Request> registerProcedure(final String topic) {
+        return this.registerProcedure(topic, EnumSet.noneOf(RegisterFlags.class));
+    }
+    
+    /**
+     * Registers a procedure at the router which will afterwards be available
+     * for remote procedure calls from other clients.<br>
+     * The actual registration will only happen after the user subscribes on
+     * the returned Observable. This guarantees that no RPC requests get lost.
+     * Incoming RPC requests will be pushed to the Subscriber via it's
+     * onNext method. The Subscriber can send responses through the methods on
+     * the {@link Request}.<br>
+     * If the client no longer wants to provide the method it can call
+     * unsubscribe() on the Subscription to unregister the procedure.<br>
+     * If the connection closes onCompleted will be called.<br>
+     * In case of errors during subscription onError will be called.
+     * @param topic The name of the procedure which this client wants to
+     * provide.<br>
+     * Must be valid WAMP URI.
+     * @param flags procedure flags
+     * @return An observable that can be used to provide a procedure.
+     */
+    public Observable<Request> registerProcedure(final String topic, final RegisterFlags... flags) {
+        return this.registerProcedure(topic, EnumSet.copyOf(Arrays.asList(flags)));
+    }
+
+    /**
+     * Registers a procedure at the router which will afterwards be available
+     * for remote procedure calls from other clients.<br>
+     * The actual registration will only happen after the user subscribes on
+     * the returned Observable. This guarantees that no RPC requests get lost.
+     * Incoming RPC requests will be pushed to the Subscriber via it's
+     * onNext method. The Subscriber can send responses through the methods on
+     * the {@link Request}.<br>
+     * If the client no longer wants to provide the method it can call
+     * unsubscribe() on the Subscription to unregister the procedure.<br>
+     * If the connection closes onCompleted will be called.<br>
+     * In case of errors during subscription onError will be called.
+     * @param topic The name of the procedure which this client wants to
+     * provide.<br>
+     * Must be valid WAMP URI.
+     * @param flags procedure flags
+     * @return An observable that can be used to provide a procedure.
+     */
+    public Observable<Request> registerProcedure(final String topic, final EnumSet<RegisterFlags> flags) {
         return Observable.create(new OnSubscribe<Request>() {
             @Override
             public void call(final Subscriber<? super Request> subscriber) {
@@ -302,14 +347,14 @@ public class WampClient {
                             return;
                         }
                         // Forward publish into the session
-                        SessionEstablishedState curState = (SessionEstablishedState)stateController.currentState();
-                        curState.performRegisterProcedure(topic, subscriber);
+                        SessionEstablishedState curState = (SessionEstablishedState) stateController.currentState();
+                        curState.performRegisterProcedure(topic, flags, subscriber);
                     }
                 });
             }
         });
     }
-    
+
     /**
      * Returns an observable that allows to subscribe on the given topic.<br>
      * The actual subscription will only be made after subscribe() was called
