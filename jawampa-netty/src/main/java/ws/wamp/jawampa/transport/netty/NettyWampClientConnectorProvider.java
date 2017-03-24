@@ -48,6 +48,7 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.websocketx.WebSocketClientHandshaker;
@@ -122,6 +123,7 @@ public class NettyWampClientConnectorProvider implements IWampConnectorProvider 
             final String subProtocols = WampSerialization.makeWebsocketSubprotocolList(serializations);
 
             final int maxFramePayloadLength = (nettyConfig == null )? NettyWampConnectionConfig.DEFAULT_MAX_FRAME_PAYLOAD_LENGTH : nettyConfig.getMaxFramePayloadLength();
+            final HttpHeaders httpHeaders = (nettyConfig == null) ? new DefaultHttpHeaders() : nettyConfig.getHttpHeaders();
 
             // Return a factory that creates a channel for websocket connections
             return new IWampConnector() {
@@ -139,7 +141,7 @@ public class NettyWampClientConnectorProvider implements IWampConnectorProvider 
                     
                     final WebSocketClientHandshaker handshaker = WebSocketClientHandshakerFactory.newHandshaker(
                         uri, WebSocketVersion.V13, subProtocols,
-                        false, new DefaultHttpHeaders(), maxFramePayloadLength);
+                        false, httpHeaders, maxFramePayloadLength);
                     
                     /**
                      * Netty handler for that receives and processes WampMessages and state
