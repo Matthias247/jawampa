@@ -16,8 +16,6 @@
 
 package ws.wamp.jawampa.client;
 
-import java.util.concurrent.RejectedExecutionException;
-
 import ws.wamp.jawampa.WampClient;
 import ws.wamp.jawampa.connection.IConnectionController;
 import ws.wamp.jawampa.connection.IPendingWampConnection;
@@ -81,27 +79,29 @@ public class ConnectingState implements ClientState, IPendingWampConnectionListe
     
     @Override
     public void connectSucceeded(final IWampConnection connection) {
-        try {
-            stateController.scheduler().execute(new Runnable() {
-                @Override
-                public void run() {
-                    if (!isCancelled) {
-                        // Our new channel is connected
-                        connectionController.setConnection(connection);
-                        HandshakingState newState = new HandshakingState(stateController, connectionController, nrConnectAttempts);
-                        stateController.setState(newState);
-                    } else {
-                        // We we're connected but aren't interested in the channel anymore
-                        // The client should close
-                        // Therefore we close the new channel
-                        stateController.setExternalState(new WampClient.DisconnectedState(null));
-                        WaitingForDisconnectState newState = new WaitingForDisconnectState(stateController, nrConnectAttempts);
-                        connection.close(false, newState.closePromise());
-                        stateController.setState(newState);
-                    }
+        boolean wasScheduled = stateController.tryScheduleAction(new Runnable() {
+            @Override
+            public void run() {
+                if (!isCancelled) {
+                    // Our new channel is connected
+                    connectionController.setConnection(connection);
+                    HandshakingState newState = new HandshakingState(stateController, connectionController, nrConnectAttempts);
+                    stateController.setState(newState);
+                } else {
+                    // We we're connected but aren't interested in the channel anymore
+                    // The client should close
+                    // Therefore we close the new channel
+                    stateController.setExternalState(new WampClient.DisconnectedState(null));
+                    WaitingForDisconnectState newState = new WaitingForDisconnectState(stateController, nrConnectAttempts);
+                    connection.close(false, newState.closePromise());
+                    stateController.setState(newState);
                 }
-            });
-        } catch (RejectedExecutionException e) {
+            }
+        });
+
+        if (!wasScheduled) {
+            // If the client was closed before the connection
+            // succeeds, close the connection
             connection.close(false, IWampConnectionPromise.Empty);
         }
     }

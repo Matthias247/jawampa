@@ -22,6 +22,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map.Entry;
+import java.util.concurrent.RejectedExecutionException;
 
 import rx.Subscriber;
 import rx.functions.Action0;
@@ -536,7 +537,7 @@ public class SessionEstablishedState implements ClientState {
             new RequestMapEntry(RegisterMessage.ID, registerFuture));
         connectionController.sendMessage(msg, IWampConnectionPromise.Empty);
     }
-    
+
     /**
      * Add an action that is added to the subscriber which is executed
      * if unsubscribe is called on a registered procedure.<br>
@@ -549,7 +550,7 @@ public class SessionEstablishedState implements ClientState {
         subscriber.add(Subscriptions.create(new Action0() {
             @Override
             public void call() {
-                stateController.scheduler().execute(new Runnable() {
+                stateController.tryScheduleAction(new Runnable() {
                     @Override
                     public void run() {
                         if (mapEntry.state != RegistrationState.Registered) return;
@@ -668,7 +669,7 @@ public class SessionEstablishedState implements ClientState {
             connectionController.sendMessage(msg, IWampConnectionPromise.Empty);
         }
     }
-    
+
     /**
      * Add an action that is added to the subscriber which is executed
      * if unsubscribe is called. This action will lead to the unsubscription at the
@@ -681,7 +682,7 @@ public class SessionEstablishedState implements ClientState {
         subscriber.add(Subscriptions.create(new Action0() {
             @Override
             public void call() {
-                stateController.scheduler().execute(new Runnable() {
+                stateController.tryScheduleAction(new Runnable() {
                     @Override
                     public void run() {
                         mapEntry.subscribers.remove(subscriber);

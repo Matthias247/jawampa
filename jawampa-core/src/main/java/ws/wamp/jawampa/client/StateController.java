@@ -80,11 +80,17 @@ public class StateController {
      * Rejected executions will be suppressed.
      * 
      * @param action The action to schedule.
+     * @return true if the Runnable could be scheduled, false otherwise
      */
-    public void tryScheduleAction(Runnable action) {
+    public boolean tryScheduleAction(Runnable action) {
         try {
-            scheduler.submit(action);
-        } catch (RejectedExecutionException e) {}
+            scheduler.execute(action);
+            // Ignore this exception
+            // The scheduling will be performed with best effort
+            return true;
+        } catch (RejectedExecutionException e) {
+            return false;
+        }
     }
 
     public ClientState currentState() {

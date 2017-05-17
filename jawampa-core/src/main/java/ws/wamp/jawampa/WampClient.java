@@ -247,7 +247,7 @@ public class WampClient {
             return resultSubject;
         }
          
-        stateController.scheduler().execute(new Runnable() {
+        boolean wasScheduled = stateController.tryScheduleAction(new Runnable() {
             @Override
             public void run() {
                 if (!(stateController.currentState() instanceof SessionEstablishedState)) {
@@ -260,6 +260,11 @@ public class WampClient {
                 
             }
         });
+
+        if (!wasScheduled) {
+            resultSubject.onError(
+                new ApplicationError(ApplicationError.CLIENT_CLOSED));
+        }
         return resultSubject;
     }
     
@@ -336,7 +341,7 @@ public class WampClient {
                     return;
                 }
 
-                stateController.scheduler().execute(new Runnable() {
+                boolean wasScheduled = stateController.tryScheduleAction(new Runnable() {
                     @Override
                     public void run() {
                         // If the Subscriber unsubscribed in the meantime we return early
@@ -351,6 +356,11 @@ public class WampClient {
                         curState.performRegisterProcedure(topic, flags, subscriber);
                     }
                 });
+
+                if (!wasScheduled) {
+                    subscriber.onError(
+                        new ApplicationError(ApplicationError.CLIENT_CLOSED));
+                }
             }
         });
     }
@@ -544,7 +554,7 @@ public class WampClient {
                     return;
                 }
 
-                stateController.scheduler().execute(new Runnable() {
+                boolean wasScheduled = stateController.tryScheduleAction(new Runnable() {
                     @Override
                     public void run() {
                         // If the Subscriber unsubscribed in the meantime we return early
@@ -559,6 +569,11 @@ public class WampClient {
                         curState.performSubscription(topic, flags, subscriber);
                     }
                 });
+
+                if (!wasScheduled) {
+                    subscriber.onError(
+                        new ApplicationError(ApplicationError.CLIENT_CLOSED));
+                }
             }
         });
     }
@@ -615,7 +630,7 @@ public class WampClient {
             return resultSubject;
         }
          
-        stateController.scheduler().execute(new Runnable() {
+        boolean wasScheduled = stateController.tryScheduleAction(new Runnable() {
             @Override
             public void run() {
                 if (!(stateController.currentState() instanceof SessionEstablishedState)) {
@@ -628,6 +643,12 @@ public class WampClient {
                 curState.performCall(procedure, flags, arguments, argumentsKw, resultSubject);
             }
         });
+
+        if (!wasScheduled) {
+            resultSubject.onError(
+                new ApplicationError(ApplicationError.CLIENT_CLOSED));
+        }
+        
         return resultSubject;
     }
     
