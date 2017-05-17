@@ -57,6 +57,7 @@ import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler;
 import io.netty.handler.codec.http.websocketx.WebSocketFrameAggregator;
 import io.netty.handler.codec.http.websocketx.WebSocketVersion;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 
 /**
@@ -109,7 +110,10 @@ public class NettyWampClientConnectorProvider implements IWampConnectorProvider 
             if (needSsl && (nettyConfig == null || nettyConfig.sslContext() == null)) {
                 // Create a default SslContext when we got none provided through the constructor
                 try {
-                    sslCtx0 = SslContext.newClientContext(InsecureTrustManagerFactory.INSTANCE);
+                    sslCtx0 = 
+                        SslContextBuilder.forClient()
+                        .trustManager(InsecureTrustManagerFactory.INSTANCE)
+                        .build();
                 }
                 catch (SSLException e) {
                     throw e;
@@ -175,7 +179,6 @@ public class NettyWampClientConnectorProvider implements IWampConnectorProvider 
                                 // The transport closed before the websocket handshake was completed
                                 connectListener.connectFailed(cause);
                             }
-                            super.exceptionCaught(ctx, cause);
                         }
                         
                         @Override

@@ -27,6 +27,8 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
@@ -37,8 +39,8 @@ import io.netty.handler.codec.http.websocketx.WebSocketHandshakeException;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
 import io.netty.handler.ssl.SslHandler;
+import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCountUtil;
-import io.netty.util.internal.StringUtil;
 import ws.wamp.jawampa.WampSerialization;
 import ws.wamp.jawampa.WampMessages.WampMessage;
 import ws.wamp.jawampa.connection.IWampConnection;
@@ -48,7 +50,7 @@ import ws.wamp.jawampa.connection.IWampConnectionPromise;
 
 import java.util.List;
 
-import static io.netty.handler.codec.http.HttpHeaders.Names.*;
+import static io.netty.handler.codec.http.HttpHeaderNames.*;
 import static io.netty.handler.codec.http.HttpVersion.*;
 
 /**
@@ -101,18 +103,23 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
     }
 
     private boolean isUpgradeRequest(FullHttpRequest request) {
-        if (!request.getDecoderResult().isSuccess()) {
+        if (!request.decoderResult().isSuccess()) {
             return false;
         }
 
-        String connectionHeaderValue = request.headers().get(HttpHeaders.Names.CONNECTION);
+        CharSequence connectionHeaderValue =
+            request.headers().get(HttpHeaderNames.CONNECTION);
         if (connectionHeaderValue == null) {
             return false;
         }
-        String[] connectionHeaderFields = connectionHeaderValue.toLowerCase().split(",");
+        AsciiString connectionHeaderString =
+            new AsciiString(connectionHeaderValue);
+        AsciiString[] connectionHeaderFields =
+            connectionHeaderString.toLowerCase().split(',');
         boolean hasUpgradeField = false;
-        for (String s : connectionHeaderFields) {
-            if (s.trim().equals(HttpHeaders.Values.UPGRADE.toLowerCase())) {
+        AsciiString upgradeValue = HttpHeaderValues.UPGRADE.toLowerCase();
+        for (AsciiString s : connectionHeaderFields) {
+            if (upgradeValue.equals(s.trim())) {
                 hasUpgradeField = true;
                 break;
             }
@@ -121,11 +128,12 @@ public class WampServerWebsocketHandler extends ChannelInboundHandlerAdapter {
             return false;
         }
 
-        if (!request.headers().contains(HttpHeaders.Names.UPGRADE, HttpHeaders.Values.WEBSOCKET, true)){
+        if (!request.headers().contains(
+            HttpHeaderNames.UPGRADE, HttpHeaderValues.WEBSOCKET, true)) {
             return false;
         }
 
-        return request.getUri().equals(websocketPath);
+        return request.uri().equals(websocketPath);
     }
 
     // All methods inside the connection will be called from the WampRouters thread
