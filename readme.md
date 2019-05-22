@@ -1,3 +1,8 @@
+## THIS LIBRARY IS UNMAINTAINED
+
+No updates for any bug, security issue or any dependency had been implemented
+for long time, and no further development for this library is planned.
+
 jawampa
 =======
 
